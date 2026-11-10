@@ -1,0 +1,146 @@
+:host {
+  display: block;
+  min-height: 100vh;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  color: #172033;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.app-container {
+  min-height: 100vh;
+  background: #f8faff;
+  display: flex;
+  flex-direction: column;
+}
+
+.navbar {
+  min-height: 76px;
+  padding: 0 7%;
+  background: white;
+  border-bottom: 1px solid #e8ecf5;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.brand {
+  font-size: 25px;
+  font-weight: 800;
+  color: #4f46e5;
+}
+
+.nav-label {
+  font-size: 14px;
+  color: #64748b;
+}
+
+.hero {
+  width: 100%;
+  max-width: 1250px;
+  margin: 0 auto;
+  padding: 100px 7% 80px;
+  flex: 1;
+}
+
+.hero-content {
+  text-align: center;
+  max-width: 750px;
+  margin: 0 auto;
+}
+
+.eyebrow {
+  color: #4f46e5;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+h1 {
+  font-size: clamp(36px, 5vw, 60px);
+  line-height: 1.15;
+  margin: 24px 0;
+  letter-spacing: -2px;
+
+  span {
+    display: block;
+    color: #4f46e5;
+  }
+}
+
+.hero-content p {
+  font-size: 17px;
+  line-height: 1.8;
+  color: #64748b;
+}
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  margin-top: 80px;
+}
+
+.feature-card {
+  background: white;
+  border: 1px solid #e8ecf5;
+  border-radius: 18px;
+  padding: 32px;
+  box-shadow: 0 8px 30px rgba(24, 39, 75, 0.04);
+
+  h2 {
+    font-size: 19px;
+    margin: 18px 0 10px;
+  }
+
+  p {
+    font-size: 14px;
+    line-height: 1.7;
+    color: #64748b;
+  }
+}
+
+.feature-icon {
+  width: 45px;
+  height: 45px;
+  border-radius: 12px;
+  background: #eef2ff;
+  color: #4f46e5;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+}
+
+.footer {
+  text-align: center;
+  padding: 25px;
+  background: white;
+  border-top: 1px solid #e8ecf5;
+  color: #64748b;
+  font-size: 13px;
+}
+
+@media (max-width: 768px) {
+  .navbar {
+    padding: 20px;
+  }
+
+  .nav-label {
+    display: none;
+  }
+
+  .hero {
+    padding: 65px 20px;
+  }
+
+  .features {
+    grid-template-columns: 1fr;
+    margin-top: 50px;
+  }
+}
