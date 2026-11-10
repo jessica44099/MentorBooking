@@ -1,0 +1,41 @@
+# .NET build output
+**/bin/
+**/obj/
+
+# Angular and Node
+**/node_modules/
+**/.angular/
+**/dist/
+**/coverage/
+
+# Local databases
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3
+
+# Local secrets and environment files
+.env
+.env.*
+!.env.example
+**/appsettings.Local.json
+**/secrets.json
+*.pfx
+*.p12
+
+# IDE files
+.vs/
+.idea/
+*.user
+*.suo
+
+# Logs and test results
+*.log
+TestResults/
+
+# Operating system files
+.DS_Store
+Thumbs.db
