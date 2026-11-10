@@ -1,37 +1,40 @@
 # MentorBooking
 
-A mentor–student doubt session booking website.
+A full-stack Mentor–Student Doubt Session Booking Platform.
 
-## Technology
+## Tech Stack
 
-- Frontend: Angular 19, standalone components, TypeScript and SCSS
-- Backend: ASP.NET Core Web API with .NET 8
-- Database: SQLite for local development
-- Authentication: JWT bearer tokens and BCrypt password hashing
-- Email: MailKit with configurable fake and SMTP providers
+### Frontend
+- Angular 19
+- TypeScript
+- Standalone Components
+- Angular Router
+- Reactive Forms
+- SCSS
 
-## Project folders
+### Backend
+- ASP.NET Core Web API (.NET 8)
+- C#
+- Entity Framework Core (planned)
+- REST APIs
+- JWT Authentication (planned)
 
-- backend: API, database access and application services
-- frontend: Angular application
+### Database
+- SQLite for local development (planned)
 
-## Time handling
+## Project Structure
 
-Store timestamps in UTC.
-Display and schedule sessions in Asia/Kolkata by default.
+MentorBooking/
+- backend/ : ASP.NET Core Web API
+- frontend/ : Angular 19 application
+- README.md
+- .gitignore
 
-## Development status
+## Run Backend
 
-Phase 0, Step 1: project folders and Git initialised.
+Open PowerShell inside the backend folder.
 
-The backend and frontend applications will be created in subsequent steps.
-
-## Secrets
-
-Never commit passwords, JWT signing keys or SMTP credentials.
-Use .NET user-secrets locally and environment variables in production.
-
-## Database portability
-
-Changing database engines requires the appropriate EF Core provider,
-provider-specific migrations and a connection string.
+```powershell
+$env:ASPNETCORE_ENVIRONMENT = "Development"
+$env:ASPNETCORE_URLS = "http://localhost:5055"
+dotnet run --no-launch-profile
