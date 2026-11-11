@@ -10,10 +10,8 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Controllers.
+// Controllers and Swagger.
 builder.Services.AddControllers();
-
-// Swagger documentation with JWT authorization.
 builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(options =>
@@ -47,7 +45,7 @@ builder.Services.AddSwaggerGen(options =>
         });
 });
 
-// Database.
+// SQLite database.
 var connectionString = builder.Configuration
     .GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException(
@@ -58,26 +56,30 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(connectionString);
 });
 
-// Authentication.
+// Authentication service.
 builder.Services.AddScoped<IAuthService, AuthService>();
 
-// Email and verification tokens.
+// Email and verification token services.
 builder.Services.AddScoped<IEmailService, FakeEmailService>();
 
 builder.Services.AddScoped<
     IAccountTokenService, AccountTokenService>();
 
-// Availability.
+// Mentor availability.
 builder.Services.AddScoped<
     IAvailabilityService, AvailabilityService>();
 
-// Student bookings.
+// Student booking.
 builder.Services.AddScoped<
     IBookingService, BookingService>();
 
-// Session approval, rejection and cancellation.
+// Approval, rejection and cancellation.
 builder.Services.AddScoped<
     ISessionLifecycleService, SessionLifecycleService>();
+
+// Start, complete and No-Show.
+builder.Services.AddScoped<
+    ISessionProgressService, SessionProgressService>();
 
 // JWT configuration.
 var jwtKey = builder.Configuration["Jwt:Key"];
@@ -132,7 +134,7 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-// Development-only seed command.
+// Development-only database seeding.
 if (builder.Configuration.GetValue<bool>("seed"))
 {
     if (!app.Environment.IsDevelopment())
@@ -211,7 +213,7 @@ if (builder.Configuration.GetValue<bool>("token-smoke"))
     return;
 }
 
-// Swagger in Development only.
+// Swagger.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -222,7 +224,7 @@ else
     app.UseHttpsRedirection();
 }
 
-// Middleware order is important.
+// Authentication before authorization.
 app.UseAuthentication();
 app.UseAuthorization();
 
