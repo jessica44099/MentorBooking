@@ -56,10 +56,10 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(connectionString);
 });
 
-// Authentication service.
+// Authentication.
 builder.Services.AddScoped<IAuthService, AuthService>();
 
-// Email and verification token services.
+// Email and account tokens.
 builder.Services.AddScoped<IEmailService, FakeEmailService>();
 
 builder.Services.AddScoped<
@@ -69,7 +69,7 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     IAvailabilityService, AvailabilityService>();
 
-// Student booking.
+// Student bookings.
 builder.Services.AddScoped<
     IBookingService, BookingService>();
 
@@ -80,6 +80,9 @@ builder.Services.AddScoped<
 // Start, complete and No-Show.
 builder.Services.AddScoped<
     ISessionProgressService, SessionProgressService>();
+
+// Automatically expire Pending bookings.
+builder.Services.AddHostedService<PendingExpirationWorker>();
 
 // JWT configuration.
 var jwtKey = builder.Configuration["Jwt:Key"];
@@ -190,7 +193,7 @@ if (builder.Configuration.GetValue<bool>("auth-smoke"))
     return;
 }
 
-// Account token smoke test.
+// Account-token smoke test.
 if (builder.Configuration.GetValue<bool>("token-smoke"))
 {
     if (!app.Environment.IsDevelopment())
@@ -224,7 +227,6 @@ else
     app.UseHttpsRedirection();
 }
 
-// Authentication before authorization.
 app.UseAuthentication();
 app.UseAuthorization();
 
