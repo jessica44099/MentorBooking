@@ -12,7 +12,6 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Controllers and Swagger.
 builder.Services.AddControllers();
-
 builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(options =>
@@ -46,7 +45,7 @@ builder.Services.AddSwaggerGen(options =>
         });
 });
 
-// SQLite database.
+// SQLite database configuration.
 var connectionString = builder.Configuration
     .GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException(
@@ -57,20 +56,24 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(connectionString);
 });
 
-// Authentication service.
+// Authentication.
 builder.Services.AddScoped<IAuthService, AuthService>();
 
-// Email and account-token services.
+// Email and account tokens.
 builder.Services.AddScoped<IEmailService, FakeEmailService>();
 
 builder.Services.AddScoped<
     IAccountTokenService, AccountTokenService>();
 
-// Mentor availability service.
+// Mentor availability.
 builder.Services.AddScoped<
     IAvailabilityService, AvailabilityService>();
 
-// JWT authentication.
+// Student booking service.
+builder.Services.AddScoped<
+    IBookingService, BookingService>();
+
+// JWT configuration.
 var jwtKey = builder.Configuration["Jwt:Key"];
 
 if (string.IsNullOrWhiteSpace(jwtKey) ||
@@ -179,7 +182,7 @@ if (builder.Configuration.GetValue<bool>("auth-smoke"))
     return;
 }
 
-// Email-token smoke test.
+// Account-token smoke test.
 if (builder.Configuration.GetValue<bool>("token-smoke"))
 {
     if (!app.Environment.IsDevelopment())
@@ -202,7 +205,7 @@ if (builder.Configuration.GetValue<bool>("token-smoke"))
     return;
 }
 
-// Enable Swagger only during development.
+// Swagger is available in Development.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
