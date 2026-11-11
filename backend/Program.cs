@@ -10,8 +10,10 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Controllers and Swagger.
+// Controllers.
 builder.Services.AddControllers();
+
+// Swagger documentation with JWT authorization.
 builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(options =>
@@ -45,7 +47,7 @@ builder.Services.AddSwaggerGen(options =>
         });
 });
 
-// SQLite database configuration.
+// Database.
 var connectionString = builder.Configuration
     .GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException(
@@ -59,19 +61,23 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // Authentication.
 builder.Services.AddScoped<IAuthService, AuthService>();
 
-// Email and account tokens.
+// Email and verification tokens.
 builder.Services.AddScoped<IEmailService, FakeEmailService>();
 
 builder.Services.AddScoped<
     IAccountTokenService, AccountTokenService>();
 
-// Mentor availability.
+// Availability.
 builder.Services.AddScoped<
     IAvailabilityService, AvailabilityService>();
 
-// Student booking service.
+// Student bookings.
 builder.Services.AddScoped<
     IBookingService, BookingService>();
+
+// Session approval, rejection and cancellation.
+builder.Services.AddScoped<
+    ISessionLifecycleService, SessionLifecycleService>();
 
 // JWT configuration.
 var jwtKey = builder.Configuration["Jwt:Key"];
@@ -126,7 +132,7 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-// Development-only database seeding.
+// Development-only seed command.
 if (builder.Configuration.GetValue<bool>("seed"))
 {
     if (!app.Environment.IsDevelopment())
@@ -182,7 +188,7 @@ if (builder.Configuration.GetValue<bool>("auth-smoke"))
     return;
 }
 
-// Account-token smoke test.
+// Account token smoke test.
 if (builder.Configuration.GetValue<bool>("token-smoke"))
 {
     if (!app.Environment.IsDevelopment())
@@ -205,7 +211,7 @@ if (builder.Configuration.GetValue<bool>("token-smoke"))
     return;
 }
 
-// Swagger is available in Development.
+// Swagger in Development only.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -216,7 +222,7 @@ else
     app.UseHttpsRedirection();
 }
 
-// Authentication must run before authorization.
+// Middleware order is important.
 app.UseAuthentication();
 app.UseAuthorization();
 
