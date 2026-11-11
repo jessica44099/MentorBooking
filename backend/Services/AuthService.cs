@@ -28,13 +28,16 @@ public sealed class AuthService : IAuthService
 {
     private readonly AppDbContext _db;
     private readonly IConfiguration _configuration;
+    private readonly IAccountTokenService _tokens;
 
     public AuthService(
         AppDbContext db,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IAccountTokenService tokens)
     {
         _db = db;
         _configuration = configuration;
+        _tokens = tokens;
     }
 
     public async Task<AuthResponse> RegisterAsync(
@@ -51,6 +54,13 @@ public sealed class AuthService : IAuthService
         }
 
         ValidateEmail(email);
+        ValidatePassword(request.Password);
+
+        if (request.Password != request.ConfirmPassword)
+        {
+            throw new ArgumentException(
+                "Passwords do not match.");
+        }
 
         var role = request.Role?.Trim().ToLowerInvariant() switch
         {
@@ -59,14 +69,6 @@ public sealed class AuthService : IAuthService
             _ => throw new ArgumentException(
                 "Choose either Mentor or Student.")
         };
-
-        ValidatePassword(request.Password);
-
-        if (request.Password != request.ConfirmPassword)
-        {
-            throw new ArgumentException(
-                "Passwords do not match.");
-        }
 
         var emailExists = await _db.Users.AnyAsync(
             user => user.Email.ToLower() == email,
@@ -106,8 +108,13 @@ public sealed class AuthService : IAuthService
                 "Email is already registered.", ex);
         }
 
-        // Registration creates an unverified account.
-        // Verification tokens and email delivery come later.
+        // Create and send the initial verification token.
+        // The service handles email delivery failures.
+        await _tokens.SendVerificationAsync(
+            user.Id,
+            isResend: false,
+            cancellationToken: cancellationToken);
+
         return GenerateAuthResponse(user);
     }
 
@@ -154,7 +161,7 @@ public sealed class AuthService : IAuthService
         }
 
         // Unverified users may log in.
-        // Booking permissions will be checked separately.
+        // Booking and approval will require verification.
         return GenerateAuthResponse(user);
     }
 
@@ -260,9 +267,9 @@ public sealed class AuthService : IAuthService
             Encoding.UTF8.GetByteCount(password) > 72)
         {
             throw new ArgumentException(
-                "Password must have at least 8 characters, " +
-                "including one letter and one number, " +
-                "and be at most 72 UTF-8 bytes.");
+                "Password must contain at least 8 characters, " +
+                "one letter and one number, and be at most " +
+                "72 UTF-8 bytes.");
         }
     }
 }

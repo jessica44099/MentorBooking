@@ -6,13 +6,45 @@ using MentorBooking.Api.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Controllers and Swagger.
 builder.Services.AddControllers();
+
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+
+builder.Services.AddSwaggerGen(options =>
+{
+    options.AddSecurityDefinition(
+        "Bearer",
+        new OpenApiSecurityScheme
+        {
+            Name = "Authorization",
+            Type = SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT",
+            In = ParameterLocation.Header,
+            Description = "Enter your JWT access token."
+        });
+
+    options.AddSecurityRequirement(
+        new OpenApiSecurityRequirement
+        {
+            {
+                new OpenApiSecurityScheme
+                {
+                    Reference = new OpenApiReference
+                    {
+                        Type = ReferenceType.SecurityScheme,
+                        Id = "Bearer"
+                    }
+                },
+                Array.Empty<string>()
+            }
+        });
+});
 
 // SQLite database.
 var connectionString = builder.Configuration
@@ -84,7 +116,7 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-// Development-only database seeding.
+// Development database seeding.
 if (builder.Configuration.GetValue<bool>("seed"))
 {
     if (!app.Environment.IsDevelopment())
@@ -103,7 +135,7 @@ if (builder.Configuration.GetValue<bool>("seed"))
     return;
 }
 
-// Existing authentication smoke test.
+// Authentication smoke test.
 if (builder.Configuration.GetValue<bool>("auth-smoke"))
 {
     if (!app.Environment.IsDevelopment())
@@ -123,7 +155,8 @@ if (builder.Configuration.GetValue<bool>("auth-smoke"))
         .GetRequiredService<IAuthService>();
 
     var result = await auth.LoginAsync(new LoginRequest(
-        "mentor1@mentorbooking.test", password));
+        "mentor1@mentorbooking.test",
+        password));
 
     if (result.Role != "Mentor" ||
         string.IsNullOrWhiteSpace(result.Token) ||
@@ -139,7 +172,7 @@ if (builder.Configuration.GetValue<bool>("auth-smoke"))
     return;
 }
 
-// Development-only email token smoke test.
+// Email token smoke test.
 if (builder.Configuration.GetValue<bool>("token-smoke"))
 {
     if (!app.Environment.IsDevelopment())
@@ -162,6 +195,7 @@ if (builder.Configuration.GetValue<bool>("token-smoke"))
     return;
 }
 
+// Swagger.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -172,6 +206,7 @@ else
     app.UseHttpsRedirection();
 }
 
+// Authentication must run before authorization.
 app.UseAuthentication();
 app.UseAuthorization();
 

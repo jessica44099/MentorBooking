@@ -1,7 +1,7 @@
 
 namespace MentorBooking.Api.DTOs;
 
-// Data required for registration.
+// Registration request.
 public sealed record RegisterRequest(
     string Name,
     string Email,
@@ -10,14 +10,13 @@ public sealed record RegisterRequest(
     string Role
 );
 
-// Data required for login.
+// Login request.
 public sealed record LoginRequest(
     string Email,
     string Password
 );
 
-// Safe login response.
-// Never return the password or password hash.
+// Login and registration response.
 public sealed record AuthResponse(
     string Token,
     DateTime ExpiresAtUtc,
@@ -26,4 +25,21 @@ public sealed record AuthResponse(
     string Email,
     string Role,
     bool IsEmailVerified
+);
+
+// Verify email request.
+public sealed record VerifyEmailRequest(
+    string Token
+);
+
+// Forgot password request.
+public sealed record ForgotPasswordRequest(
+    string Email
+);
+
+// Reset password request.
+public sealed record ResetPasswordRequest(
+    string Token,
+    string Password,
+    string ConfirmPassword
 );
