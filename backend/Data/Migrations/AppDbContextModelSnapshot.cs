@@ -17,6 +17,44 @@ namespace MentorBooking.Api.Data.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.33");
 
+            modelBuilder.Entity("MentorBooking.Api.Models.AuthToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("UsedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId", "Type", "CreatedAtUtc");
+
+                    b.ToTable("AuthTokens");
+                });
+
             modelBuilder.Entity("MentorBooking.Api.Models.AvailabilitySlot", b =>
                 {
                     b.Property<Guid>("Id")
@@ -52,6 +90,95 @@ namespace MentorBooking.Api.Data.Migrations
                     b.HasIndex("MentorId", "StartUtc");
 
                     b.ToTable("AvailabilitySlots");
+                });
+
+            modelBuilder.Entity("MentorBooking.Api.Models.EmailLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("HtmlBody")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("NextAttemptAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("SentAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TextBody")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ToAddress")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status", "NextAttemptAtUtc");
+
+                    b.ToTable("EmailLogs");
+                });
+
+            modelBuilder.Entity("MentorBooking.Api.Models.Notification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ReadAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("SessionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionId");
+
+                    b.HasIndex("UserId", "ReadAtUtc", "CreatedAtUtc");
+
+                    b.ToTable("Notifications");
                 });
 
             modelBuilder.Entity("MentorBooking.Api.Models.Review", b =>
@@ -255,6 +382,44 @@ namespace MentorBooking.Api.Data.Migrations
                     b.ToTable("SessionStatusHistory");
                 });
 
+            modelBuilder.Entity("MentorBooking.Api.Models.ShiftHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("CausedBySessionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("MinutesShifted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("NewStartUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("OldStartUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CausedBySessionId");
+
+                    b.HasIndex("SessionId", "CreatedAtUtc");
+
+                    b.ToTable("ShiftHistories");
+                });
+
             modelBuilder.Entity("MentorBooking.Api.Models.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -309,11 +474,34 @@ namespace MentorBooking.Api.Data.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("MentorBooking.Api.Models.AuthToken", b =>
+                {
+                    b.HasOne("MentorBooking.Api.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("MentorBooking.Api.Models.AvailabilitySlot", b =>
                 {
                     b.HasOne("MentorBooking.Api.Models.User", null)
                         .WithMany()
                         .HasForeignKey("MentorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MentorBooking.Api.Models.Notification", b =>
+                {
+                    b.HasOne("MentorBooking.Api.Models.Session", null)
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MentorBooking.Api.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
@@ -383,6 +571,20 @@ namespace MentorBooking.Api.Data.Migrations
                         .WithMany()
                         .HasForeignKey("SessionId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("MentorBooking.Api.Models.ShiftHistory", b =>
+                {
+                    b.HasOne("MentorBooking.Api.Models.Session", null)
+                        .WithMany()
+                        .HasForeignKey("CausedBySessionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("MentorBooking.Api.Models.Session", null)
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 #pragma warning restore 612, 618

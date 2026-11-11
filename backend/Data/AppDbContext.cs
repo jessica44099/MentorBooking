@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
     {
     }
 
+    // Existing tables
     public DbSet<User> Users => Set<User>();
 
     public DbSet<AvailabilitySlot> AvailabilitySlots =>
@@ -29,6 +30,19 @@ public class AppDbContext : DbContext
 
     public DbSet<SessionStatusHistory> SessionStatusHistory =>
         Set<SessionStatusHistory>();
+
+    // New tables
+    public DbSet<AuthToken> AuthTokens =>
+        Set<AuthToken>();
+
+    public DbSet<Notification> Notifications =>
+        Set<Notification>();
+
+    public DbSet<EmailLog> EmailLogs =>
+        Set<EmailLog>();
+
+    public DbSet<ShiftHistory> ShiftHistories =>
+        Set<ShiftHistory>();
 
     protected override void OnModelCreating(
         ModelBuilder modelBuilder)
@@ -248,6 +262,125 @@ public class AppDbContext : DbContext
             {
                 x.SessionId,
                 x.ChangedAtUtc
+            });
+        });
+
+        // AUTHENTICATION TOKENS
+        modelBuilder.Entity<AuthToken>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Type)
+                .HasConversion<string>()
+                .HasMaxLength(30);
+
+            entity.Property(x => x.TokenHash)
+                .IsRequired()
+                .HasMaxLength(128);
+
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.TokenHash)
+                .IsUnique();
+
+            entity.HasIndex(x => new
+            {
+                x.UserId,
+                x.Type,
+                x.CreatedAtUtc
+            });
+        });
+
+        // NOTIFICATIONS
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Title)
+                .IsRequired()
+                .HasMaxLength(200);
+
+            entity.Property(x => x.Message)
+                .IsRequired()
+                .HasMaxLength(2000);
+
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne<Session>()
+                .WithMany()
+                .HasForeignKey(x => x.SessionId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => new
+            {
+                x.UserId,
+                x.ReadAtUtc,
+                x.CreatedAtUtc
+            });
+        });
+
+        // EMAIL LOGS
+        modelBuilder.Entity<EmailLog>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.ToAddress)
+                .IsRequired()
+                .HasMaxLength(320);
+
+            entity.Property(x => x.Subject)
+                .IsRequired()
+                .HasMaxLength(250);
+
+            entity.Property(x => x.HtmlBody)
+                .IsRequired();
+
+            entity.Property(x => x.TextBody)
+                .IsRequired();
+
+            entity.Property(x => x.Status)
+                .HasConversion<string>()
+                .HasMaxLength(20);
+
+            entity.Property(x => x.LastError)
+                .HasMaxLength(4000);
+
+            entity.HasIndex(x => new
+            {
+                x.Status,
+                x.NextAttemptAtUtc
+            });
+        });
+
+        // SESSION SHIFT HISTORY
+        modelBuilder.Entity<ShiftHistory>(entity =>
+        {
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Reason)
+                .IsRequired()
+                .HasMaxLength(500);
+
+            entity.HasOne<Session>()
+                .WithMany()
+                .HasForeignKey(x => x.SessionId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne<Session>()
+                .WithMany()
+                .HasForeignKey(x => x.CausedBySessionId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => new
+            {
+                x.SessionId,
+                x.CreatedAtUtc
             });
         });
     }

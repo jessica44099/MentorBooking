@@ -1,15 +1,29 @@
+
+using MentorBooking.Api.Data;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Register API controllers.
+// Controllers
 builder.Services.AddControllers();
 
-// Enable API documentation.
+// Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// SQLite database
+var connectionString = builder.Configuration
+    .GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException(
+        "DefaultConnection is missing.");
+
+builder.Services.AddDbContext<AppDbContext>(options =>
+{
+    options.UseSqlite(connectionString);
+});
+
 var app = builder.Build();
 
-// Swagger is available during development.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -17,13 +31,11 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
-    // Redirect HTTP to HTTPS outside development.
     app.UseHttpsRedirection();
 }
 
 app.UseAuthorization();
 
-// Connect controller endpoints.
 app.MapControllers();
 
 app.Run();
