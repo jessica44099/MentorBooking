@@ -57,11 +57,18 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(connectionString);
 });
 
-// Application services.
+// Authentication service.
 builder.Services.AddScoped<IAuthService, AuthService>();
+
+// Email and account-token services.
 builder.Services.AddScoped<IEmailService, FakeEmailService>();
+
 builder.Services.AddScoped<
     IAccountTokenService, AccountTokenService>();
+
+// Mentor availability service.
+builder.Services.AddScoped<
+    IAvailabilityService, AvailabilityService>();
 
 // JWT authentication.
 var jwtKey = builder.Configuration["Jwt:Key"];
@@ -116,7 +123,7 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-// Development database seeding.
+// Development-only database seeding.
 if (builder.Configuration.GetValue<bool>("seed"))
 {
     if (!app.Environment.IsDevelopment())
@@ -172,7 +179,7 @@ if (builder.Configuration.GetValue<bool>("auth-smoke"))
     return;
 }
 
-// Email token smoke test.
+// Email-token smoke test.
 if (builder.Configuration.GetValue<bool>("token-smoke"))
 {
     if (!app.Environment.IsDevelopment())
@@ -195,7 +202,7 @@ if (builder.Configuration.GetValue<bool>("token-smoke"))
     return;
 }
 
-// Swagger.
+// Enable Swagger only during development.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
