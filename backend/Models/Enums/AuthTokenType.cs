@@ -3,5 +3,6 @@ namespace MentorBooking.Api.Models.Enums;
 public enum AuthTokenType
 {
     EmailVerification = 1,
-    PasswordReset = 2
+    PasswordReset = 2,
+    EmailVerificationResend = 3
 }

@@ -14,7 +14,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Database configuration.
+// SQLite database.
 var connectionString = builder.Configuration
     .GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException(
@@ -25,10 +25,13 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(connectionString);
 });
 
-// Authentication service.
+// Application services.
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IEmailService, FakeEmailService>();
+builder.Services.AddScoped<
+    IAccountTokenService, AccountTokenService>();
 
-// JWT settings.
+// JWT authentication.
 var jwtKey = builder.Configuration["Jwt:Key"];
 
 if (string.IsNullOrWhiteSpace(jwtKey) ||
@@ -81,13 +84,13 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-// Existing development database seeder.
+// Development-only database seeding.
 if (builder.Configuration.GetValue<bool>("seed"))
 {
     if (!app.Environment.IsDevelopment())
     {
         throw new InvalidOperationException(
-            "Database seeding is allowed only in Development.");
+            "Seeding is development-only.");
     }
 
     await using var scope = app.Services.CreateAsyncScope();
@@ -100,8 +103,7 @@ if (builder.Configuration.GetValue<bool>("seed"))
     return;
 }
 
-// Development-only login smoke test.
-// No JWT or password is printed.
+// Existing authentication smoke test.
 if (builder.Configuration.GetValue<bool>("auth-smoke"))
 {
     if (!app.Environment.IsDevelopment())
@@ -121,8 +123,7 @@ if (builder.Configuration.GetValue<bool>("auth-smoke"))
         .GetRequiredService<IAuthService>();
 
     var result = await auth.LoginAsync(new LoginRequest(
-        "mentor1@mentorbooking.test",
-        password));
+        "mentor1@mentorbooking.test", password));
 
     if (result.Role != "Mentor" ||
         string.IsNullOrWhiteSpace(result.Token) ||
@@ -134,6 +135,29 @@ if (builder.Configuration.GetValue<bool>("auth-smoke"))
 
     Console.WriteLine(
         "PASS: BCrypt login verification and JWT creation.");
+
+    return;
+}
+
+// Development-only email token smoke test.
+if (builder.Configuration.GetValue<bool>("token-smoke"))
+{
+    if (!app.Environment.IsDevelopment())
+    {
+        throw new InvalidOperationException(
+            "Token testing is development-only.");
+    }
+
+    await using var scope = app.Services.CreateAsyncScope();
+
+    var tokens = scope.ServiceProvider
+        .GetRequiredService<IAccountTokenService>();
+
+    await tokens.RequestPasswordResetAsync(
+        "mentor1@mentorbooking.test");
+
+    Console.WriteLine(
+        "PASS: Password reset token request processed.");
 
     return;
 }
