@@ -106,12 +106,14 @@ public sealed class SessionLifecycleService
         {
             await using var transaction =
                 await _db.Database.BeginTransactionAsync(
-                    IsolationLevel.Serializable, ct);
+                    IsolationLevel.Serializable,
+                    ct);
 
             var actor = await _db.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
-                    x => x.Id == actorId && !x.IsDeleted,
+                    x => x.Id == actorId &&
+                         !x.IsDeleted,
                     ct);
 
             if (actor == null)
@@ -120,7 +122,10 @@ public sealed class SessionLifecycleService
                     "Account not found or inactive.");
             }
 
+            // Read without change tracking because
+            // we will use a conditional SQL update.
             var session = await _db.Sessions
+                .AsNoTracking()
                 .FirstOrDefaultAsync(
                     x => x.Id == sessionId,
                     ct);
@@ -131,8 +136,7 @@ public sealed class SessionLifecycleService
                     "Session not found.");
             }
 
-            // Only the assigned mentor can approve or reject.
-            // The assigned student or mentor can cancel.
+            // Check session ownership.
             if (action == ActionType.Approve ||
                 action == ActionType.Reject)
             {
@@ -150,35 +154,29 @@ public sealed class SessionLifecycleService
             }
             else
             {
-                if (actor.Role == UserRole.Student)
+                var ownsSession =
+                    actor.Role == UserRole.Student
+                        ? session.StudentId == actor.Id
+                        : actor.Role == UserRole.Mentor &&
+                          session.MentorId == actor.Id;
+
+                if (!ownsSession)
                 {
-                    if (session.StudentId != actor.Id)
-                    {
-                        throw new KeyNotFoundException(
-                            "Session not found.");
-                    }
-                }
-                else if (actor.Role == UserRole.Mentor)
-                {
-                    if (session.MentorId != actor.Id)
-                    {
-                        throw new KeyNotFoundException(
-                            "Session not found.");
-                    }
-                }
-                else
-                {
-                    throw new SessionLifecycleForbiddenException(
-                        "Invalid account role.");
+                    throw new KeyNotFoundException(
+                        "Session not found.");
                 }
             }
 
             var now = DateTime.UtcNow;
+
             var startUtc = DateTime.SpecifyKind(
                 session.ScheduledStartUtc,
                 DateTimeKind.Utc);
 
             var previousStatus = session.Status;
+
+            SessionStatus newStatus;
+            string? validatedMeetingInfo = null;
 
             switch (action)
             {
@@ -191,32 +189,21 @@ public sealed class SessionLifecycleService
 
                     EnsurePending(session, "approve");
 
-                    if (startUtc <= now)
-                    {
-                        throw new InvalidSessionTransitionException(
-                            "Cannot approve a session that has started.");
-                    }
+                    EnsurePendingNotOverdue(session, now);
 
-                    // Required for Zoom, Text and Call.
-                    session.MeetingInfo = ValidateMeetingInfo(
+                    validatedMeetingInfo = ValidateMeetingInfo(
                         session.Mode,
                         meetingInfo);
 
-                    session.Status = SessionStatus.Approved;
-                    session.RejectReason = null;
+                    newStatus = SessionStatus.Approved;
                     break;
 
                 case ActionType.Reject:
                     EnsurePending(session, "reject");
 
-                    if (startUtc <= now)
-                    {
-                        throw new InvalidSessionTransitionException(
-                            "Cannot reject a session after its start.");
-                    }
+                    EnsurePendingNotOverdue(session, now);
 
-                    session.Status = SessionStatus.Rejected;
-                    session.RejectReason = reason;
+                    newStatus = SessionStatus.Rejected;
                     break;
 
                 case ActionType.Cancel:
@@ -226,13 +213,116 @@ public sealed class SessionLifecycleService
                         startUtc,
                         now);
 
-                    session.Status = SessionStatus.Cancelled;
+                    newStatus = SessionStatus.Cancelled;
                     break;
+
+                default:
+                    throw new InvalidOperationException(
+                        "Unsupported lifecycle action.");
             }
 
-            // Application-managed optimistic concurrency.
-            // EF will compare the original RowVersion on update.
-            session.RowVersion = Guid.NewGuid();
+            // A conditional update protects us from
+            // overwriting a concurrent status change.
+            var originalVersion = session.RowVersion;
+            var nextVersion = Guid.NewGuid();
+
+            IQueryable<Session> matchingSession =
+                _db.Sessions.Where(
+                    x => x.Id == session.Id &&
+                         x.Status == previousStatus &&
+                         x.RowVersion == originalVersion);
+
+            // Enforce the Pending deadline again in SQL.
+            // This condition applies to approval, rejection,
+            // and cancellation of Pending sessions.
+            if (previousStatus == SessionStatus.Pending)
+            {
+                var approvalCutoff = now.AddHours(
+                    -PendingBookingDeadline.ApprovalHours);
+
+                matchingSession = matchingSession.Where(
+                    x => x.CreatedAtUtc > approvalCutoff &&
+                         x.ScheduledStartUtc > now);
+            }
+
+            // Recheck the cancellation deadline in SQL
+            // for Approved sessions.
+            if (action == ActionType.Cancel &&
+                previousStatus == SessionStatus.Approved)
+            {
+                if (actor.Role == UserRole.Student)
+                {
+                    var studentDeadline =
+                        now.AddHours(2);
+
+                    matchingSession = matchingSession.Where(
+                        x => x.ScheduledStartUtc >
+                             studentDeadline);
+                }
+                else
+                {
+                    matchingSession = matchingSession.Where(
+                        x => x.ScheduledStartUtc > now);
+                }
+            }
+
+            int updatedRows;
+
+            if (action == ActionType.Approve)
+            {
+                updatedRows = await matchingSession
+                    .ExecuteUpdateAsync(
+                        setters => setters
+                            .SetProperty(
+                                x => x.Status,
+                                SessionStatus.Approved)
+                            .SetProperty(
+                                x => x.RowVersion,
+                                nextVersion)
+                            .SetProperty(
+                                x => x.MeetingInfo,
+                                validatedMeetingInfo)
+                            .SetProperty(
+                                x => x.RejectReason,
+                                (string?)null),
+                        ct);
+            }
+            else if (action == ActionType.Reject)
+            {
+                updatedRows = await matchingSession
+                    .ExecuteUpdateAsync(
+                        setters => setters
+                            .SetProperty(
+                                x => x.Status,
+                                SessionStatus.Rejected)
+                            .SetProperty(
+                                x => x.RowVersion,
+                                nextVersion)
+                            .SetProperty(
+                                x => x.RejectReason,
+                                reason),
+                        ct);
+            }
+            else
+            {
+                updatedRows = await matchingSession
+                    .ExecuteUpdateAsync(
+                        setters => setters
+                            .SetProperty(
+                                x => x.Status,
+                                SessionStatus.Cancelled)
+                            .SetProperty(
+                                x => x.RowVersion,
+                                nextVersion),
+                        ct);
+            }
+
+            if (updatedRows != 1)
+            {
+                throw new SessionLifecycleConflictException(
+                    "The session changed or its deadline " +
+                    "passed. Refresh and try again.");
+            }
 
             string historyReason = action switch
             {
@@ -251,13 +341,12 @@ public sealed class SessionLifecycleService
                     Id = Guid.NewGuid(),
                     SessionId = session.Id,
                     FromStatus = previousStatus,
-                    ToStatus = session.Status,
+                    ToStatus = newStatus,
                     ChangedByUserId = actor.Id,
                     Reason = historyReason,
                     ChangedAtUtc = now
                 });
 
-            // Session update and history must succeed together.
             await _db.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
 
@@ -274,15 +363,15 @@ public sealed class SessionLifecycleService
 
             return new SessionTransitionResponse(
                 session.Id,
-                session.Status.ToString(),
+                newStatus.ToString(),
                 now,
                 message);
         }
         catch (DbUpdateConcurrencyException ex)
         {
             throw new SessionLifecycleConflictException(
-                "Session was changed by another request. " +
-                "Please refresh and try again.",
+                "Session changed during this request. " +
+                "Refresh and try again.",
                 ex);
         }
         catch (SqliteException ex)
@@ -314,6 +403,21 @@ public sealed class SessionLifecycleService
         }
     }
 
+    private static void EnsurePendingNotOverdue(
+        Session session,
+        DateTime now)
+    {
+        if (PendingBookingDeadline.IsOverdue(
+                session.CreatedAtUtc,
+                session.ScheduledStartUtc,
+                now))
+        {
+            throw new InvalidSessionTransitionException(
+                "The approval deadline has passed. " +
+                "This booking will expire automatically.");
+        }
+    }
+
     private static void ValidateCancellation(
         Session session,
         UserRole actorRole,
@@ -329,11 +433,14 @@ public sealed class SessionLifecycleService
                 $"{session.Status}.");
         }
 
-        // NeedsReschedule sessions may be cancelled
-        // without a timing penalty.
         if (session.Status == SessionStatus.NeedsReschedule)
         {
             return;
+        }
+
+        if (session.Status == SessionStatus.Pending)
+        {
+            EnsurePendingNotOverdue(session, now);
         }
 
         if (startUtc <= now)
@@ -342,8 +449,6 @@ public sealed class SessionLifecycleService
                 "Cannot cancel a session after its start.");
         }
 
-        // Students must cancel approved sessions
-        // more than two hours before the start.
         if (actorRole == UserRole.Student &&
             session.Status == SessionStatus.Approved &&
             startUtc <= now.AddHours(2))
@@ -378,7 +483,8 @@ public sealed class SessionLifecycleService
     {
         var value = meetingInfo?.Trim() ?? "";
 
-        if (value.Length == 0 || value.Length > 1500)
+        if (value.Length == 0 ||
+            value.Length > 1500)
         {
             throw new ArgumentException(
                 "Meeting information is required " +
@@ -389,7 +495,9 @@ public sealed class SessionLifecycleService
         {
             case SessionMode.Zoom:
                 if (!Uri.TryCreate(
-                        value, UriKind.Absolute, out var uri) ||
+                        value,
+                        UriKind.Absolute,
+                        out var uri) ||
                     uri.Scheme != Uri.UriSchemeHttps ||
                     !IsZoomHost(uri.Host) ||
                     !string.IsNullOrEmpty(uri.UserInfo))

@@ -51,7 +51,6 @@ public sealed class BookingService : IBookingService
         CreateBookingRequest request,
         CancellationToken ct = default)
     {
-        // Validate request before opening a transaction.
         var mode = ValidateRequest(request);
 
         var startUtc = request.ScheduledStartUtc;
@@ -63,13 +62,11 @@ public sealed class BookingService : IBookingService
 
         try
         {
-            // SQLite uses serializable transactions.
-            // Keep checks and insert in one transaction.
             await using var transaction =
                 await _db.Database.BeginTransactionAsync(
                     IsolationLevel.Serializable, ct);
 
-            // STEP 1: Confirm the student account.
+            // Verify the student.
             var student = await _db.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
@@ -84,14 +81,13 @@ public sealed class BookingService : IBookingService
                     "Only students can book sessions.");
             }
 
-            // Unverified students cannot book.
             if (!student.IsEmailVerified)
             {
                 throw new BookingForbiddenException(
                     "Verify your email before booking.");
             }
 
-            // STEP 2: Confirm the mentor.
+            // Verify the mentor.
             var mentor = await _db.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
@@ -106,7 +102,7 @@ public sealed class BookingService : IBookingService
                     "Mentor not found.");
             }
 
-            // STEP 3: Find the selected Available slot.
+            // Verify the selected availability slot.
             var slot = await _db.AvailabilitySlots
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
@@ -121,7 +117,6 @@ public sealed class BookingService : IBookingService
                     "Available slot not found for this mentor.");
             }
 
-            // Session must fit entirely inside this slot.
             if (startUtc < slot.StartUtc ||
                 endUtc > slot.EndUtc)
             {
@@ -130,7 +125,7 @@ public sealed class BookingService : IBookingService
                     "inside the selected Available slot.");
             }
 
-            // STEP 4: Confirm no Busy slot overlaps.
+            // Check for overlapping Busy slots.
             var busyConflict =
                 await _db.AvailabilitySlots.AnyAsync(
                     x => x.MentorId == mentor.Id &&
@@ -145,16 +140,40 @@ public sealed class BookingService : IBookingService
                     "The mentor is busy at this time.");
             }
 
-            // STEP 5: Check the mentor's bookings.
-            // Pending holds time, just like Approved.
-            // InProgress also blocks the time.
+            // Capture one UTC time for the overlap checks.
+            var now = DateTime.UtcNow;
+
+            var approvalCutoff = now.AddHours(
+                -PendingBookingDeadline.ApprovalHours);
+
+            // A Pending booking is active only when:
+            // - It is less than 48 hours old.
+            // - Its scheduled start has not arrived.
+            //
+            // Approved and InProgress bookings always
+            // hold their scheduled time.
+            //
+            // The explicit comparisons are translated
+            // into SQL by EF Core.
+
+            // Check mentor overlap.
             var mentorConflict = await _db.Sessions
                 .AnyAsync(
                     x => x.MentorId == mentor.Id &&
                          (
-                             x.Status == SessionStatus.Pending ||
-                             x.Status == SessionStatus.Approved ||
-                             x.Status == SessionStatus.InProgress
+                             x.Status ==
+                                 SessionStatus.Approved ||
+
+                             x.Status ==
+                                 SessionStatus.InProgress ||
+
+                             (
+                                 x.Status ==
+                                     SessionStatus.Pending &&
+                                 x.CreatedAtUtc >
+                                     approvalCutoff &&
+                                 x.ScheduledStartUtc > now
+                             )
                          ) &&
                          x.ScheduledStartUtc < endUtc &&
                          x.ScheduledEndUtc > startUtc,
@@ -167,15 +186,25 @@ public sealed class BookingService : IBookingService
                     "please pick another.");
             }
 
-            // STEP 6: Prevent the student booking
-            // overlapping sessions with other mentors.
+            // Apply the same deadline rules to the
+            // student's other bookings.
             var studentConflict = await _db.Sessions
                 .AnyAsync(
                     x => x.StudentId == student.Id &&
                          (
-                             x.Status == SessionStatus.Pending ||
-                             x.Status == SessionStatus.Approved ||
-                             x.Status == SessionStatus.InProgress
+                             x.Status ==
+                                 SessionStatus.Approved ||
+
+                             x.Status ==
+                                 SessionStatus.InProgress ||
+
+                             (
+                                 x.Status ==
+                                     SessionStatus.Pending &&
+                                 x.CreatedAtUtc >
+                                     approvalCutoff &&
+                                 x.ScheduledStartUtc > now
+                             )
                          ) &&
                          x.ScheduledStartUtc < endUtc &&
                          x.ScheduledEndUtc > startUtc,
@@ -188,8 +217,8 @@ public sealed class BookingService : IBookingService
                     "scheduled during this time.");
             }
 
-            // STEP 7: Create the Pending booking.
-            var now = DateTime.UtcNow;
+            // Create the Pending booking.
+            var createdAtUtc = DateTime.UtcNow;
 
             var session = new Session
             {
@@ -210,26 +239,25 @@ public sealed class BookingService : IBookingService
                 MeetingInfo = null,
 
                 RowVersion = Guid.NewGuid(),
-                CreatedAtUtc = now
+                CreatedAtUtc = createdAtUtc
             };
 
             _db.Sessions.Add(session);
 
-            // STEP 8: Record the initial status.
+            // Record initial status.
             _db.SessionStatusHistory.Add(
                 new SessionStatusHistory
                 {
+                    Id = Guid.NewGuid(),
                     SessionId = session.Id,
                     FromStatus = null,
                     ToStatus = SessionStatus.Pending,
                     ChangedByUserId = student.Id,
                     Reason = "Student requested a session.",
-                    ChangedAtUtc = now
+                    ChangedAtUtc = createdAtUtc
                 });
 
-            // STEP 9: Save both records atomically.
             await _db.SaveChangesAsync(ct);
-
             await transaction.CommitAsync(ct);
 
             return ToResponse(session);
@@ -238,22 +266,25 @@ public sealed class BookingService : IBookingService
             when (ex.SqliteErrorCode is 5 or 6)
         {
             throw new BookingConflictException(
-                "That time was just taken, " +
-                "please pick another.", ex);
+                "Calendar is being updated. " +
+                "Please refresh and retry.",
+                ex);
         }
         catch (DbUpdateConcurrencyException ex)
         {
             throw new BookingConflictException(
                 "The booking changed while processing. " +
-                "Please try another time.", ex);
+                "Please try again.",
+                ex);
         }
         catch (DbUpdateException ex)
             when (ex.InnerException is SqliteException sqlite &&
-                  (sqlite.SqliteErrorCode is 5 or 6 or 19))
+                  sqlite.SqliteErrorCode is 5 or 6 or 19)
         {
             throw new BookingConflictException(
                 "The selected time is no longer available. " +
-                "Please refresh and try again.", ex);
+                "Please refresh and try again.",
+                ex);
         }
     }
 
@@ -323,12 +354,13 @@ public sealed class BookingService : IBookingService
         var endUtc = request.ScheduledStartUtc
             .AddMinutes(request.DurationMinutes);
 
-        // Convert only for checking the IST calendar grid.
         var localStart = TimeZoneInfo.ConvertTimeFromUtc(
-            request.ScheduledStartUtc, _timeZone);
+            request.ScheduledStartUtc,
+            _timeZone);
 
         var localEnd = TimeZoneInfo.ConvertTimeFromUtc(
-            endUtc, _timeZone);
+            endUtc,
+            _timeZone);
 
         if (localStart.Date != localEnd.Date)
         {
@@ -337,7 +369,8 @@ public sealed class BookingService : IBookingService
         }
 
         if (localStart.Minute % 30 != 0 ||
-            localStart.Ticks % TimeSpan.TicksPerMinute != 0)
+            localStart.Ticks %
+                TimeSpan.TicksPerMinute != 0)
         {
             throw new ArgumentException(
                 "Session start must follow the " +
@@ -358,13 +391,17 @@ public sealed class BookingService : IBookingService
             session.Topic,
             session.Description,
             session.Mode.ToString(),
+
             DateTime.SpecifyKind(
                 session.ScheduledStartUtc,
                 DateTimeKind.Utc),
+
             DateTime.SpecifyKind(
                 session.ScheduledEndUtc,
                 DateTimeKind.Utc),
+
             session.Status.ToString(),
+
             DateTime.SpecifyKind(
                 session.CreatedAtUtc,
                 DateTimeKind.Utc)
