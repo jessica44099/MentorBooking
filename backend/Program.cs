@@ -81,7 +81,11 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     ISessionProgressService, SessionProgressService>();
 
-// Automatically expire Pending bookings.
+// Mentor profile management.
+builder.Services.AddScoped<
+    IMentorProfileService, MentorProfileService>();
+
+// Automatically expire overdue Pending bookings.
 builder.Services.AddHostedService<PendingExpirationWorker>();
 
 // JWT configuration.
@@ -216,7 +220,7 @@ if (builder.Configuration.GetValue<bool>("token-smoke"))
     return;
 }
 
-// Swagger.
+// Swagger is available in Development.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -227,6 +231,7 @@ else
     app.UseHttpsRedirection();
 }
 
+// Authentication before authorization.
 app.UseAuthentication();
 app.UseAuthorization();
 
