@@ -81,9 +81,13 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     ISessionProgressService, SessionProgressService>();
 
-// Mentor profile management.
+// Private mentor profile management.
 builder.Services.AddScoped<
     IMentorProfileService, MentorProfileService>();
+
+// Student-facing mentor discovery.
+builder.Services.AddScoped<
+    IMentorDiscoveryService, MentorDiscoveryService>();
 
 // Automatically expire overdue Pending bookings.
 builder.Services.AddHostedService<PendingExpirationWorker>();
@@ -220,7 +224,7 @@ if (builder.Configuration.GetValue<bool>("token-smoke"))
     return;
 }
 
-// Swagger is available in Development.
+// Swagger in Development.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
