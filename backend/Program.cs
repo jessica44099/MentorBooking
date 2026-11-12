@@ -88,6 +88,8 @@ builder.Services.AddScoped<
 // Student-facing mentor discovery.
 builder.Services.AddScoped<
     IMentorDiscoveryService, MentorDiscoveryService>();
+    // Student reviews and mentor ratings.
+builder.Services.AddScoped<IReviewService, ReviewService>();
 
 // Automatically expire overdue Pending bookings.
 builder.Services.AddHostedService<PendingExpirationWorker>();
