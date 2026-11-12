@@ -321,14 +321,42 @@ namespace MentorBooking.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ChangeReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("ChangedAtUtc")
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("ChangedByMentorId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("NewPrivateMentorNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NewResolution")
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NewSummary")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("NewValue")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("OldPrivateMentorNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OldResolution")
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OldSummary")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("OldValue")
                         .HasColumnType("INTEGER");

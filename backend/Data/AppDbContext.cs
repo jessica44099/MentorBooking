@@ -194,6 +194,26 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<SessionRecordAudit>(entity =>
         {
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.OldSummary)
+    .HasMaxLength(500);
+
+entity.Property(x => x.NewSummary)
+    .HasMaxLength(500);
+
+entity.Property(x => x.OldResolution)
+    .HasMaxLength(30);
+
+entity.Property(x => x.NewResolution)
+    .HasMaxLength(30);
+
+entity.Property(x => x.OldPrivateMentorNote)
+    .HasMaxLength(2000);
+
+entity.Property(x => x.NewPrivateMentorNote)
+    .HasMaxLength(2000);
+
+entity.Property(x => x.ChangeReason)
+    .HasMaxLength(500);
 
             entity.HasOne<SessionRecord>()
                 .WithMany()

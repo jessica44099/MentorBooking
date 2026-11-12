@@ -94,6 +94,10 @@ builder.Services.AddScoped<IReviewService, ReviewService>();
 builder.Services.AddScoped<
     IMentorDashboardStatsService,
     MentorDashboardStatsService>();
+    // Completed-session corrections and private audit history.
+builder.Services.AddScoped<
+    ISessionRecordCorrectionService,
+    SessionRecordCorrectionService>();
 
 // Automatically expire overdue Pending bookings.
 builder.Services.AddHostedService<PendingExpirationWorker>();
