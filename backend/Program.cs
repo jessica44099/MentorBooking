@@ -10,7 +10,10 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Controllers and Swagger.
+// =====================================================
+// 1. CONTROLLERS AND SWAGGER
+// =====================================================
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
@@ -45,7 +48,11 @@ builder.Services.AddSwaggerGen(options =>
         });
 });
 
-// SQLite database.
+// =====================================================
+// 2. DATABASE CONFIGURATION
+// =====================================================
+
+// SQLite database connection.
 var connectionString = builder.Configuration
     .GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException(
@@ -56,53 +63,97 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlite(connectionString);
 });
 
+// =====================================================
+// 3. REGISTER APPLICATION SERVICES
+// =====================================================
+
 // Authentication.
-builder.Services.AddScoped<IAuthService, AuthService>();
-
-// Email and account tokens.
-builder.Services.AddScoped<IEmailService, FakeEmailService>();
-
 builder.Services.AddScoped<
-    IAccountTokenService, AccountTokenService>();
+    IAuthService,
+    AuthService>();
 
-// Mentor availability.
+// Email services.
 builder.Services.AddScoped<
-    IAvailabilityService, AvailabilityService>();
+    IEmailService,
+    FakeEmailService>();
 
-// Student bookings.
+// Email verification and password reset tokens.
 builder.Services.AddScoped<
-    IBookingService, BookingService>();
+    IAccountTokenService,
+    AccountTokenService>();
 
-// Approval, rejection and cancellation.
+// Mentor availability management.
 builder.Services.AddScoped<
-    ISessionLifecycleService, SessionLifecycleService>();
+    IAvailabilityService,
+    AvailabilityService>();
 
-// Start, complete and No-Show.
+// Student session bookings.
 builder.Services.AddScoped<
-    ISessionProgressService, SessionProgressService>();
+    IBookingService,
+    BookingService>();
 
-// Private mentor profile management.
+// Session approval, rejection and cancellation.
 builder.Services.AddScoped<
-    IMentorProfileService, MentorProfileService>();
+    ISessionLifecycleService,
+    SessionLifecycleService>();
 
-// Student-facing mentor discovery.
+// Session start, completion and No-Show.
 builder.Services.AddScoped<
-    IMentorDiscoveryService, MentorDiscoveryService>();
-    // Student reviews and mentor ratings.
-builder.Services.AddScoped<IReviewService, ReviewService>();
+    ISessionProgressService,
+    SessionProgressService>();
+
+// Mentor profile management.
+builder.Services.AddScoped<
+    IMentorProfileService,
+    MentorProfileService>();
+
+// Mentor discovery and search.
+builder.Services.AddScoped<
+    IMentorDiscoveryService,
+    MentorDiscoveryService>();
+
+// Student reviews and mentor ratings.
+builder.Services.AddScoped<
+    IReviewService,
+    ReviewService>();
+
 // Mentor dashboard statistics.
 builder.Services.AddScoped<
     IMentorDashboardStatsService,
     MentorDashboardStatsService>();
-    // Completed-session corrections and private audit history.
+
+// Completed-session corrections and audit history.
 builder.Services.AddScoped<
     ISessionRecordCorrectionService,
     SessionRecordCorrectionService>();
 
-// Automatically expire overdue Pending bookings.
-builder.Services.AddHostedService<PendingExpirationWorker>();
+// =====================================================
+// STEP 27 — SESSION RESCHEDULING
+// =====================================================
 
-// JWT configuration.
+// Mentor proposes a new session time.
+// Student accepts the proposed time.
+builder.Services.AddScoped<
+    ISessionRescheduleService,
+    SessionRescheduleService>();
+// Step 28: shift history and conflict preview.
+builder.Services.AddScoped<
+    IRescheduleSafetyService,
+    RescheduleSafetyService>();
+// =====================================================
+// 4. BACKGROUND SERVICES
+// =====================================================
+
+// Automatically expire overdue Pending bookings.
+builder.Services.AddHostedService<
+    PendingExpirationWorker>();
+// Step 28: expire unanswered reschedule proposals.
+builder.Services.AddHostedService<
+    RescheduleExpirationWorker>();
+// =====================================================
+// 5. JWT AUTHENTICATION CONFIGURATION
+// =====================================================
+
 var jwtKey = builder.Configuration["Jwt:Key"];
 
 if (string.IsNullOrWhiteSpace(jwtKey) ||
@@ -134,6 +185,7 @@ builder.Services
                 ValidateAudience = true,
                 ValidateLifetime = true,
                 ValidateIssuerSigningKey = true,
+
                 RequireSignedTokens = true,
                 RequireExpirationTime = true,
 
@@ -151,11 +203,19 @@ builder.Services
             };
     });
 
+// Configure role-based authorization.
 builder.Services.AddAuthorization();
+
+// =====================================================
+// 6. BUILD APPLICATION
+// =====================================================
 
 var app = builder.Build();
 
-// Development-only database seeding.
+// =====================================================
+// 7. DEVELOPMENT DATABASE SEEDING
+// =====================================================
+
 if (builder.Configuration.GetValue<bool>("seed"))
 {
     if (!app.Environment.IsDevelopment())
@@ -164,7 +224,8 @@ if (builder.Configuration.GetValue<bool>("seed"))
             "Seeding is development-only.");
     }
 
-    await using var scope = app.Services.CreateAsyncScope();
+    await using var scope =
+        app.Services.CreateAsyncScope();
 
     var db = scope.ServiceProvider
         .GetRequiredService<AppDbContext>();
@@ -174,7 +235,10 @@ if (builder.Configuration.GetValue<bool>("seed"))
     return;
 }
 
-// Authentication smoke test.
+// =====================================================
+// 8. AUTHENTICATION SMOKE TEST
+// =====================================================
+
 if (builder.Configuration.GetValue<bool>("auth-smoke"))
 {
     if (!app.Environment.IsDevelopment())
@@ -188,14 +252,16 @@ if (builder.Configuration.GetValue<bool>("auth-smoke"))
         ?? throw new InvalidOperationException(
             "Set MENTORBOOKING_TEST_PASSWORD.");
 
-    await using var scope = app.Services.CreateAsyncScope();
+    await using var scope =
+        app.Services.CreateAsyncScope();
 
     var auth = scope.ServiceProvider
         .GetRequiredService<IAuthService>();
 
-    var result = await auth.LoginAsync(new LoginRequest(
-        "mentor1@mentorbooking.test",
-        password));
+    var result = await auth.LoginAsync(
+        new LoginRequest(
+            "mentor1@mentorbooking.test",
+            password));
 
     if (result.Role != "Mentor" ||
         string.IsNullOrWhiteSpace(result.Token) ||
@@ -211,7 +277,10 @@ if (builder.Configuration.GetValue<bool>("auth-smoke"))
     return;
 }
 
-// Account-token smoke test.
+// =====================================================
+// 9. ACCOUNT TOKEN SMOKE TEST
+// =====================================================
+
 if (builder.Configuration.GetValue<bool>("token-smoke"))
 {
     if (!app.Environment.IsDevelopment())
@@ -220,7 +289,8 @@ if (builder.Configuration.GetValue<bool>("token-smoke"))
             "Token testing is development-only.");
     }
 
-    await using var scope = app.Services.CreateAsyncScope();
+    await using var scope =
+        app.Services.CreateAsyncScope();
 
     var tokens = scope.ServiceProvider
         .GetRequiredService<IAccountTokenService>();
@@ -234,7 +304,10 @@ if (builder.Configuration.GetValue<bool>("token-smoke"))
     return;
 }
 
-// Swagger in Development.
+// =====================================================
+// 10. SWAGGER AND HTTPS
+// =====================================================
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -245,10 +318,23 @@ else
     app.UseHttpsRedirection();
 }
 
-// Authentication before authorization.
+// =====================================================
+// 11. AUTHENTICATION AND AUTHORIZATION
+// =====================================================
+
+// Authentication must run before authorization.
 app.UseAuthentication();
+
 app.UseAuthorization();
 
+// =====================================================
+// 12. MAP API CONTROLLERS
+// =====================================================
+
 app.MapControllers();
+
+// =====================================================
+// 13. START APPLICATION
+// =====================================================
 
 app.Run();
