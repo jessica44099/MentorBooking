@@ -28,8 +28,8 @@ public sealed class BookingService : IBookingService
     {
         _db = db;
 
-        var timeZoneId = configuration["TimeZone:Id"]
-            ?? "Asia/Kolkata";
+        var timeZoneId =
+            configuration["TimeZone:Id"] ?? "Asia/Kolkata";
 
         try
         {
@@ -46,6 +46,7 @@ public sealed class BookingService : IBookingService
         }
     }
 
+    // A student creates a Pending session.
     public async Task<BookingResponse> CreateAsync(
         Guid studentId,
         CreateBookingRequest request,
@@ -54,6 +55,7 @@ public sealed class BookingService : IBookingService
         var mode = ValidateRequest(request);
 
         var startUtc = request.ScheduledStartUtc;
+
         var endUtc = startUtc.AddMinutes(
             request.DurationMinutes);
 
@@ -64,9 +66,10 @@ public sealed class BookingService : IBookingService
         {
             await using var transaction =
                 await _db.Database.BeginTransactionAsync(
-                    IsolationLevel.Serializable, ct);
+                    IsolationLevel.Serializable,
+                    ct);
 
-            // Verify the student.
+            // Check that the student exists and is active.
             var student = await _db.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
@@ -87,7 +90,7 @@ public sealed class BookingService : IBookingService
                     "Verify your email before booking.");
             }
 
-            // Verify the mentor.
+            // Check the selected mentor.
             var mentor = await _db.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
@@ -102,7 +105,8 @@ public sealed class BookingService : IBookingService
                     "Mentor not found.");
             }
 
-            // Verify the selected availability slot.
+            // Confirm that the chosen availability slot
+            // belongs to the mentor and is Available.
             var slot = await _db.AvailabilitySlots
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
@@ -125,7 +129,8 @@ public sealed class BookingService : IBookingService
                     "inside the selected Available slot.");
             }
 
-            // Check for overlapping Busy slots.
+            // Busy calendar blocks take precedence
+            // over Available slots.
             var busyConflict =
                 await _db.AvailabilitySlots.AnyAsync(
                     x => x.MentorId == mentor.Id &&
@@ -140,23 +145,21 @@ public sealed class BookingService : IBookingService
                     "The mentor is busy at this time.");
             }
 
-            // Capture one UTC time for the overlap checks.
             var now = DateTime.UtcNow;
 
             var approvalCutoff = now.AddHours(
                 -PendingBookingDeadline.ApprovalHours);
 
-            // A Pending booking is active only when:
-            // - It is less than 48 hours old.
-            // - Its scheduled start has not arrived.
+            // A time is reserved by:
+            // Approved
+            // InProgress
+            // NeedsReschedule
+            // Pending, if not overdue
             //
-            // Approved and InProgress bookings always
-            // hold their scheduled time.
-            //
-            // The explicit comparisons are translated
-            // into SQL by EF Core.
+            // Cancelled, Rejected, Expired, Completed,
+            // and NoShow sessions do not reserve time.
 
-            // Check mentor overlap.
+            // Check the mentor's other sessions.
             var mentorConflict = await _db.Sessions
                 .AnyAsync(
                     x => x.MentorId == mentor.Id &&
@@ -166,6 +169,9 @@ public sealed class BookingService : IBookingService
 
                              x.Status ==
                                  SessionStatus.InProgress ||
+
+                             x.Status ==
+                                 SessionStatus.NeedsReschedule ||
 
                              (
                                  x.Status ==
@@ -182,12 +188,11 @@ public sealed class BookingService : IBookingService
             if (mentorConflict)
             {
                 throw new BookingConflictException(
-                    "That time was just taken, " +
-                    "please pick another.");
+                    "That time was just taken. " +
+                    "Please pick another.");
             }
 
-            // Apply the same deadline rules to the
-            // student's other bookings.
+            // Check the student's other sessions.
             var studentConflict = await _db.Sessions
                 .AnyAsync(
                     x => x.StudentId == student.Id &&
@@ -197,6 +202,9 @@ public sealed class BookingService : IBookingService
 
                              x.Status ==
                                  SessionStatus.InProgress ||
+
+                             x.Status ==
+                                 SessionStatus.NeedsReschedule ||
 
                              (
                                  x.Status ==
@@ -217,12 +225,13 @@ public sealed class BookingService : IBookingService
                     "scheduled during this time.");
             }
 
-            // Create the Pending booking.
+            // Save the new booking.
             var createdAtUtc = DateTime.UtcNow;
 
             var session = new Session
             {
                 Id = Guid.NewGuid(),
+
                 MentorId = mentor.Id,
                 StudentId = student.Id,
                 SlotId = slot.Id,
@@ -244,7 +253,7 @@ public sealed class BookingService : IBookingService
 
             _db.Sessions.Add(session);
 
-            // Record initial status.
+            // Record the initial status.
             _db.SessionStatusHistory.Add(
                 new SessionStatusHistory
                 {
@@ -291,6 +300,12 @@ public sealed class BookingService : IBookingService
     private SessionMode ValidateRequest(
         CreateBookingRequest request)
     {
+        if (request == null)
+        {
+            throw new ArgumentException(
+                "Booking details are required.");
+        }
+
         if (request.MentorId == Guid.Empty ||
             request.SlotId == Guid.Empty)
         {
@@ -313,14 +328,15 @@ public sealed class BookingService : IBookingService
             description.Length > 2000)
         {
             throw new ArgumentException(
-                "Description must contain " +
-                "20 to 2000 characters.");
+                "Description must contain 20 to 2000 characters.");
         }
 
         var modeText = request.Mode?.Trim() ?? "";
 
         if (!Enum.TryParse<SessionMode>(
-                modeText, true, out var mode) ||
+                modeText,
+                true,
+                out var mode) ||
             !Enum.IsDefined(mode) ||
             !string.Equals(
                 modeText,
@@ -373,13 +389,15 @@ public sealed class BookingService : IBookingService
                 TimeSpan.TicksPerMinute != 0)
         {
             throw new ArgumentException(
-                "Session start must follow the " +
-                "30-minute calendar grid.");
+                "Session start must follow " +
+                "the 30-minute calendar grid.");
         }
 
         return mode;
     }
 
+    // Return the same response shape as the
+    // existing bookings API.
     private static BookingResponse ToResponse(
         Session session)
     {
