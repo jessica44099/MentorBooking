@@ -35,8 +35,8 @@ public sealed class SessionRescheduleService
     {
         _db = db;
 
-        var timeZoneId = configuration["TimeZone:Id"]
-            ?? "Asia/Kolkata";
+        var timeZoneId =
+            configuration["TimeZone:Id"] ?? "Asia/Kolkata";
 
         try
         {
@@ -51,7 +51,10 @@ public sealed class SessionRescheduleService
         }
     }
 
-    // Mentor proposes a different time.
+    // =====================================================
+    // 1. MENTOR PROPOSES A NEW SESSION TIME
+    // =====================================================
+
     public async Task<RescheduleResponse> ProposeAsync(
         Guid mentorId,
         Guid sessionId,
@@ -81,12 +84,13 @@ public sealed class SessionRescheduleService
                     IsolationLevel.Serializable,
                     ct);
 
+            // Validate mentor.
             await EnsureActiveUserAsync(
                 mentorId,
                 UserRole.Mentor,
                 ct);
 
-            // Find only a session assigned to this mentor.
+            // Find the session belonging to this mentor.
             var session = await _db.Sessions
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
@@ -124,6 +128,10 @@ public sealed class SessionRescheduleService
                     "A started session cannot be rescheduled.");
             }
 
+            // =================================================
+            // 2. VALIDATE NEW START TIME
+            // =================================================
+
             var newStart = request.NewStartUtc;
 
             if (newStart <= now.AddHours(2))
@@ -160,8 +168,10 @@ public sealed class SessionRescheduleService
                     "Choose a different start time.");
             }
 
-            // The new slot must belong to this mentor
-            // and must be marked Available.
+            // =================================================
+            // 3. CHECK NEW AVAILABILITY SLOT
+            // =================================================
+
             var newSlot = await _db.AvailabilitySlots
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
@@ -176,7 +186,7 @@ public sealed class SessionRescheduleService
                     "New Available slot not found.");
             }
 
-            // Protect mentor and student calendars.
+            // Validate both mentor and student calendars.
             await EnsureTargetIsFreeAsync(
                 session,
                 newSlot,
@@ -185,10 +195,12 @@ public sealed class SessionRescheduleService
                 now,
                 ct);
 
+            // =================================================
+            // 4. UPDATE SESSION WITH CONCURRENCY CHECK
+            // =================================================
+
             var nextVersion = Guid.NewGuid();
 
-            // Update only if nobody has changed this
-            // session since it was read.
             var changedRows = await _db.Sessions
                 .Where(x =>
                     x.Id == session.Id &&
@@ -222,7 +234,10 @@ public sealed class SessionRescheduleService
                     "Refresh and try again.");
             }
 
-            // Store the shift from old to new time.
+            // =================================================
+            // 5. SAVE SHIFT HISTORY
+            // =================================================
+
             _db.ShiftHistories.Add(new ShiftHistory
             {
                 Id = Guid.NewGuid(),
@@ -236,7 +251,10 @@ public sealed class SessionRescheduleService
                 CreatedAtUtc = now
             });
 
-            // Store the status transition separately.
+            // =================================================
+            // 6. SAVE STATUS HISTORY
+            // =================================================
+
             _db.SessionStatusHistory.Add(
                 new SessionStatusHistory
                 {
@@ -249,9 +267,27 @@ public sealed class SessionRescheduleService
                     ChangedAtUtc = now
                 });
 
-            // The session change and both history records
-            // succeed or fail as one transaction.
+            // =================================================
+            // 7. STEP 29 — NOTIFY STUDENT
+            // =================================================
+
+            // The mentor proposed a new session time.
+            // Create an unread notification for the student.
+
+            NotificationEvents.RescheduleProposed(
+                _db,
+                session,
+                now);
+
+            // =================================================
+            // 8. SAVE CHANGES AND COMMIT
+            // =================================================
+
+            // Session, shift history, status history,
+            // and notification are saved in one transaction.
+
             await _db.SaveChangesAsync(ct);
+
             await transaction.CommitAsync(ct);
 
             return new RescheduleResponse(
@@ -288,7 +324,10 @@ public sealed class SessionRescheduleService
         }
     }
 
-    // Student accepts the new session time.
+    // =====================================================
+    // 9. STUDENT ACCEPTS THE NEW SESSION TIME
+    // =====================================================
+
     public async Task<RescheduleResponse> AcceptAsync(
         Guid studentId,
         Guid sessionId,
@@ -301,6 +340,7 @@ public sealed class SessionRescheduleService
                     IsolationLevel.Serializable,
                     ct);
 
+            // Validate student.
             await EnsureActiveUserAsync(
                 studentId,
                 UserRole.Student,
@@ -336,6 +376,10 @@ public sealed class SessionRescheduleService
                     "The proposed session time has passed.");
             }
 
+            // =================================================
+            // 10. CHECK THAT THE PROPOSED SLOT STILL EXISTS
+            // =================================================
+
             var slot = await _db.AvailabilitySlots
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
@@ -350,7 +394,6 @@ public sealed class SessionRescheduleService
                     "Proposed availability no longer exists.");
             }
 
-            // Check the chosen time again before approval.
             await EnsureTargetIsFreeAsync(
                 session,
                 slot,
@@ -358,6 +401,10 @@ public sealed class SessionRescheduleService
                 AsUtc(session.ScheduledEndUtc),
                 now,
                 ct);
+
+            // =================================================
+            // 11. ACCEPT WITH CONCURRENCY PROTECTION
+            // =================================================
 
             var nextVersion = Guid.NewGuid();
 
@@ -385,6 +432,10 @@ public sealed class SessionRescheduleService
                     "The proposal changed. Refresh and retry.");
             }
 
+            // =================================================
+            // 12. SAVE ACCEPTANCE STATUS HISTORY
+            // =================================================
+
             _db.SessionStatusHistory.Add(
                 new SessionStatusHistory
                 {
@@ -398,7 +449,24 @@ public sealed class SessionRescheduleService
                     ChangedAtUtc = now
                 });
 
+            // =================================================
+            // 13. STEP 29 — NOTIFY MENTOR
+            // =================================================
+
+            // The student accepted the proposed time.
+            // Create an unread notification for the mentor.
+
+            NotificationEvents.RescheduleAccepted(
+                _db,
+                session,
+                now);
+
+            // =================================================
+            // 14. SAVE CHANGES AND COMMIT
+            // =================================================
+
             await _db.SaveChangesAsync(ct);
+
             await transaction.CommitAsync(ct);
 
             return new RescheduleResponse(
@@ -436,7 +504,10 @@ public sealed class SessionRescheduleService
         }
     }
 
-    // Check target slot and both participants' bookings.
+    // =====================================================
+    // 15. VALIDATE TARGET SLOT AND BOOKING CONFLICTS
+    // =====================================================
+
     private async Task EnsureTargetIsFreeAsync(
         Session session,
         AvailabilitySlot slot,
@@ -455,7 +526,7 @@ public sealed class SessionRescheduleService
                 "inside an Available slot.");
         }
 
-        // Busy calendar blocks always prevent booking.
+        // Check Busy calendar blocks.
         var busyConflict = await _db.AvailabilitySlots
             .AsNoTracking()
             .AnyAsync(
@@ -474,11 +545,9 @@ public sealed class SessionRescheduleService
         var approvalCutoff = now.AddHours(
             -PendingBookingDeadline.ApprovalHours);
 
-        // Check both calendars:
-        // - all sessions assigned to this mentor
-        // - all sessions assigned to this student
-        //
-        // Exclude the session being rescheduled.
+        // Protect both mentor and student calendars.
+        // Exclude the current session.
+
         var conflict = await _db.Sessions
             .AsNoTracking()
             .AnyAsync(
@@ -510,7 +579,10 @@ public sealed class SessionRescheduleService
         }
     }
 
-    // Validate local calendar rules.
+    // =====================================================
+    // 16. VALIDATE LOCAL CALENDAR RULES
+    // =====================================================
+
     private void ValidateLocalTime(
         DateTime startUtc,
         DateTime endUtc)
@@ -530,14 +602,18 @@ public sealed class SessionRescheduleService
         }
 
         if (localStart.Minute % 30 != 0 ||
-            localStart.Ticks % TimeSpan.TicksPerMinute != 0)
+            localStart.Ticks %
+                TimeSpan.TicksPerMinute != 0)
         {
             throw new ArgumentException(
                 "Start must follow the 30-minute grid.");
         }
     }
 
-    // Validate current database account and email.
+    // =====================================================
+    // 17. VALIDATE USER ACCOUNT
+    // =====================================================
+
     private async Task EnsureActiveUserAsync(
         Guid userId,
         UserRole role,
@@ -568,6 +644,10 @@ public sealed class SessionRescheduleService
                 "Verify your email before rescheduling.");
         }
     }
+
+    // =====================================================
+    // 18. NORMALIZE DATABASE UTC VALUES
+    // =====================================================
 
     private static DateTime AsUtc(DateTime value)
     {

@@ -128,7 +128,7 @@ builder.Services.AddScoped<
     SessionRecordCorrectionService>();
 
 // =====================================================
-// STEP 27 — SESSION RESCHEDULING
+// 4. STEP 27 — SESSION RESCHEDULING
 // =====================================================
 
 // Mentor proposes a new session time.
@@ -136,22 +136,42 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<
     ISessionRescheduleService,
     SessionRescheduleService>();
-// Step 28: shift history and conflict preview.
+
+// =====================================================
+// 5. STEP 28 — SHIFT HISTORY AND CONFLICT HANDLING
+// =====================================================
+
+// View previous rescheduling changes.
+// Preview scheduling conflicts before proposing.
 builder.Services.AddScoped<
     IRescheduleSafetyService,
     RescheduleSafetyService>();
+
 // =====================================================
-// 4. BACKGROUND SERVICES
+// 6. STEP 29 — STUDENT AND MENTOR NOTIFICATIONS
+// =====================================================
+
+// Get notifications for the authenticated user.
+// Count unread notifications.
+// Mark individual or all notifications as read.
+builder.Services.AddScoped<
+    INotificationService,
+    NotificationService>();
+
+// =====================================================
+// 7. BACKGROUND SERVICES
 // =====================================================
 
 // Automatically expire overdue Pending bookings.
 builder.Services.AddHostedService<
     PendingExpirationWorker>();
-// Step 28: expire unanswered reschedule proposals.
+
+// Automatically expire unanswered reschedule proposals.
 builder.Services.AddHostedService<
     RescheduleExpirationWorker>();
+
 // =====================================================
-// 5. JWT AUTHENTICATION CONFIGURATION
+// 8. JWT AUTHENTICATION CONFIGURATION
 // =====================================================
 
 var jwtKey = builder.Configuration["Jwt:Key"];
@@ -203,17 +223,17 @@ builder.Services
             };
     });
 
-// Configure role-based authorization.
+// Role-based authorization.
 builder.Services.AddAuthorization();
 
 // =====================================================
-// 6. BUILD APPLICATION
+// 9. BUILD APPLICATION
 // =====================================================
 
 var app = builder.Build();
 
 // =====================================================
-// 7. DEVELOPMENT DATABASE SEEDING
+// 10. DEVELOPMENT DATABASE SEEDING
 // =====================================================
 
 if (builder.Configuration.GetValue<bool>("seed"))
@@ -236,7 +256,7 @@ if (builder.Configuration.GetValue<bool>("seed"))
 }
 
 // =====================================================
-// 8. AUTHENTICATION SMOKE TEST
+// 11. AUTHENTICATION SMOKE TEST
 // =====================================================
 
 if (builder.Configuration.GetValue<bool>("auth-smoke"))
@@ -278,7 +298,7 @@ if (builder.Configuration.GetValue<bool>("auth-smoke"))
 }
 
 // =====================================================
-// 9. ACCOUNT TOKEN SMOKE TEST
+// 12. ACCOUNT TOKEN SMOKE TEST
 // =====================================================
 
 if (builder.Configuration.GetValue<bool>("token-smoke"))
@@ -305,7 +325,7 @@ if (builder.Configuration.GetValue<bool>("token-smoke"))
 }
 
 // =====================================================
-// 10. SWAGGER AND HTTPS
+// 13. SWAGGER AND HTTPS
 // =====================================================
 
 if (app.Environment.IsDevelopment())
@@ -319,7 +339,7 @@ else
 }
 
 // =====================================================
-// 11. AUTHENTICATION AND AUTHORIZATION
+// 14. AUTHENTICATION AND AUTHORIZATION
 // =====================================================
 
 // Authentication must run before authorization.
@@ -328,13 +348,13 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 // =====================================================
-// 12. MAP API CONTROLLERS
+// 15. MAP API CONTROLLERS
 // =====================================================
 
 app.MapControllers();
 
 // =====================================================
-// 13. START APPLICATION
+// 16. START APPLICATION
 // =====================================================
 
 app.Run();

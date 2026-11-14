@@ -52,6 +52,10 @@ public sealed class SessionProgressService
         _db = db;
     }
 
+    // =====================================================
+    // 1. START A SESSION
+    // =====================================================
+
     public Task<SessionTransitionResponse> StartAsync(
         Guid mentorId,
         Guid sessionId,
@@ -64,6 +68,10 @@ public sealed class SessionProgressService
             null,
             ct);
     }
+
+    // =====================================================
+    // 2. COMPLETE A SESSION
+    // =====================================================
 
     public Task<SessionTransitionResponse> CompleteAsync(
         Guid mentorId,
@@ -79,6 +87,10 @@ public sealed class SessionProgressService
             ct);
     }
 
+    // =====================================================
+    // 3. MARK A SESSION AS NO-SHOW
+    // =====================================================
+
     public Task<SessionTransitionResponse> MarkNoShowAsync(
         Guid mentorId,
         Guid sessionId,
@@ -92,6 +104,10 @@ public sealed class SessionProgressService
             ct);
     }
 
+    // =====================================================
+    // 4. COMMON SESSION TRANSITION METHOD
+    // =====================================================
+
     private async Task<SessionTransitionResponse> TransitionAsync(
         Guid mentorId,
         Guid sessionId,
@@ -99,7 +115,7 @@ public sealed class SessionProgressService
         CompleteSessionRequest? request,
         CancellationToken ct)
     {
-        // Validate the completion form before writing anything.
+        // Validate completion details before modifying data.
         ValidatedCompletion? completion =
             action == ProgressAction.Complete
                 ? ValidateCompletion(request)
@@ -112,7 +128,10 @@ public sealed class SessionProgressService
                     IsolationLevel.Serializable,
                     ct);
 
-            // The actor must be an active, verified mentor.
+            // =================================================
+            // 5. VALIDATE MENTOR
+            // =====================================================
+
             var mentor = await _db.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
@@ -133,7 +152,10 @@ public sealed class SessionProgressService
                     "Verify your email before managing sessions.");
             }
 
-            // Only the assigned mentor can access the session.
+            // =================================================
+            // 6. LOAD SESSION
+            // =====================================================
+
             var session = await _db.Sessions
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
@@ -163,9 +185,14 @@ public sealed class SessionProgressService
             string historyReason;
             string successMessage;
 
+            // =================================================
+            // 7. VALIDATE SESSION ACTION
+            // =====================================================
+
             switch (action)
             {
                 case ProgressAction.Start:
+
                     if (session.Status != SessionStatus.Approved)
                     {
                         throw new InvalidSessionTransitionException(
@@ -194,9 +221,11 @@ public sealed class SessionProgressService
                     newStatus = SessionStatus.InProgress;
                     historyReason = "Mentor started the session.";
                     successMessage = "Session started successfully.";
+
                     break;
 
                 case ProgressAction.Complete:
+
                     if (session.Status != SessionStatus.InProgress)
                     {
                         throw new InvalidSessionTransitionException(
@@ -233,9 +262,11 @@ public sealed class SessionProgressService
                     newStatus = SessionStatus.Completed;
                     historyReason = "Mentor completed the session.";
                     successMessage = "Session completed successfully.";
+
                     break;
 
                 case ProgressAction.NoShow:
+
                     if (session.Status != SessionStatus.Approved)
                     {
                         throw new InvalidSessionTransitionException(
@@ -262,15 +293,19 @@ public sealed class SessionProgressService
                         "Mentor marked the session No-Show.";
                     successMessage =
                         "Session marked No-Show successfully.";
+
                     break;
 
                 default:
+
                     throw new InvalidOperationException(
                         "Unsupported session action.");
             }
 
-            // Compare the original RowVersion explicitly.
-            // ExecuteUpdate does not use EF change tracking.
+            // =================================================
+            // 8. CONCURRENCY PROTECTION
+            // =====================================================
+
             var originalVersion = session.RowVersion;
             var nextVersion = Guid.NewGuid();
 
@@ -281,6 +316,10 @@ public sealed class SessionProgressService
                      x.RowVersion == originalVersion);
 
             int updatedRows;
+
+            // =================================================
+            // 9. START SESSION
+            // =====================================================
 
             if (action == ProgressAction.Start)
             {
@@ -298,6 +337,11 @@ public sealed class SessionProgressService
                                 (DateTime?)now),
                         ct);
             }
+
+            // =================================================
+            // 10. COMPLETE SESSION
+            // =====================================================
+
             else if (action == ProgressAction.Complete)
             {
                 updatedRows = await matchingSession
@@ -314,6 +358,11 @@ public sealed class SessionProgressService
                                 (DateTime?)now),
                         ct);
             }
+
+            // =================================================
+            // 11. MARK SESSION NO-SHOW
+            // =====================================================
+
             else
             {
                 updatedRows = await matchingSession
@@ -335,7 +384,10 @@ public sealed class SessionProgressService
                     "Refresh and try again.");
             }
 
-            // The completion record belongs to this session.
+            // =================================================
+            // 12. SAVE COMPLETED SESSION RECORD
+            // =====================================================
+
             if (action == ProgressAction.Complete)
             {
                 _db.SessionRecords.Add(new SessionRecord
@@ -350,7 +402,10 @@ public sealed class SessionProgressService
                 });
             }
 
-            // Every successful transition gets a history row.
+            // =================================================
+            // 13. RECORD SESSION STATUS HISTORY
+            // =====================================================
+
             _db.SessionStatusHistory.Add(
                 new SessionStatusHistory
                 {
@@ -363,8 +418,32 @@ public sealed class SessionProgressService
                     ChangedAtUtc = now
                 });
 
-            // Save the record and history in the same
-            // transaction as the conditional status update.
+            // =================================================
+            // 14. STEP 29 — CREATE STUDENT NOTIFICATION
+            // =====================================================
+
+            // NotificationEvents.ProgressChanged creates
+            // a notification only for:
+            //
+            // Completed -> "Session completed"
+            // NoShow    -> "Session marked No-Show"
+            //
+            // InProgress does not create a notification.
+
+            NotificationEvents.ProgressChanged(
+                _db,
+                session,
+                newStatus,
+                now);
+
+            // =================================================
+            // 15. SAVE AND COMMIT
+            // =====================================================
+
+            // Save the session record, status history,
+            // and any generated notification together
+            // in the same transaction as the status update.
+
             await _db.SaveChangesAsync(ct);
 
             await transaction.CommitAsync(ct);
@@ -375,6 +454,11 @@ public sealed class SessionProgressService
                 now,
                 successMessage);
         }
+
+        // =================================================
+        // ERROR HANDLING
+        // =====================================================
+
         catch (SqliteException ex)
             when (ex.SqliteErrorCode is 5 or 6)
         {
@@ -398,6 +482,10 @@ public sealed class SessionProgressService
                 ex);
         }
     }
+
+    // =====================================================
+    // 16. VALIDATE SESSION COMPLETION DETAILS
+    // =====================================================
 
     private static ValidatedCompletion ValidateCompletion(
         CompleteSessionRequest? request)
