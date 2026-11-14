@@ -1,0 +1,44 @@
+<main>
+  <section class="hero container">
+    <div class="intro">
+      <span class="eyebrow">A BETTER WAY TO CLEAR DOUBTS</span>
+      <h1>Great learning starts with <span>the right mentor.</span></h1>
+      <p>Find mentors for Quant, VARC and DILR, request free doubt-clearing sessions and track your learning in one place.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="#how-it-works">How it works</a>
+        <a class="btn btn-outline" href="#api-status">Check connection</a>
+      </div>
+      <p class="mini-note">No payment required for sessions.</p>
+    </div>
+    <aside class="journey" aria-label="How the session process works">
+      <div class="journey-title">Your learning journey</div>
+      <div class="journey-step"><span>01</span><div><strong>Find a mentor</strong><small>Choose your exam subject</small></div></div>
+      <div class="journey-step"><span>02</span><div><strong>Request a free session</strong><small>Pick genuinely available time</small></div></div>
+      <div class="journey-step"><span>03</span><div><strong>Track your session</strong><small>Stay informed as status changes</small></div></div>
+      <div class="subject-tags" aria-label="Supported subjects"><span>Quant</span><span>VARC</span><span>DILR</span></div>
+    </aside>
+  </section>
+
+  <section class="section container" id="how-it-works">
+    <div class="section-head"><span class="eyebrow">BUILT FOR STUDENTS AND MENTORS</span><h2>Everything in one place</h2></div>
+    <div class="features">
+      <article class="feature-card"><div class="number">01</div><h3>Discover mentors</h3><p>Find registered mentors by subject and review their teaching profiles.</p></article>
+      <article class="feature-card"><div class="number">02</div><h3>Book your time</h3><p>Request a free session from available slots and follow its approval status.</p></article>
+      <article class="feature-card"><div class="number">03</div><h3>Manage sessions</h3><p>Mentors can manage availability, respond to bookings and review session history.</p></article>
+    </div>
+  </section>
+
+  <section class="status-section container" id="api-status">
+    <div><span class="eyebrow">LIVE CONNECTION CHECK</span><h2>Backend API</h2><p>Checks the real /api/health endpoint, not sample data.</p></div>
+    @if (backendStatus$ | async; as backend) {
+      <div class="status-result" role="status" aria-live="polite">
+        <span class="status-pill" [class.online]="backend.status === 'Healthy'">
+          {{ backend.status === 'Healthy' ? 'Connected' : 'Offline' }}
+        </span>
+        <span>{{ backend.message }}</span>
+      </div>
+    } @else {
+      <p role="status">Checking backend connection...</p>
+    }
+  </section>
+</main>

@@ -1,29 +1,47 @@
+
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+
 import { AppComponent } from './app.component';
+import { routes } from './app.routes';
 
 describe('AppComponent', () => {
+
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [AppComponent],
+      providers: [provideRouter(routes)]
     }).compileComponents();
   });
 
-  it('should create the app', () => {
-    const fixture = TestBed.createComponent(AppComponent);
-    const app = fixture.componentInstance;
-    expect(app).toBeTruthy();
+  it('should create the application', () => {
+    const fixture =
+      TestBed.createComponent(AppComponent);
+
+    expect(fixture.componentInstance)
+      .toBeTruthy();
   });
 
-  it(`should have the 'mentor-booking-client' title`, () => {
-    const fixture = TestBed.createComponent(AppComponent);
-    const app = fixture.componentInstance;
-    expect(app.title).toEqual('mentor-booking-client');
+  it('should have the correct title', () => {
+    const fixture =
+      TestBed.createComponent(AppComponent);
+
+    expect(fixture.componentInstance.title)
+      .toBe('MentorBooking');
   });
 
-  it('should render title', () => {
-    const fixture = TestBed.createComponent(AppComponent);
+  it('should contain the router outlet', () => {
+    const fixture =
+      TestBed.createComponent(AppComponent);
+
     fixture.detectChanges();
-    const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('Hello, mentor-booking-client');
+
+    const element =
+      fixture.nativeElement as HTMLElement;
+
+    expect(
+      element.querySelector('router-outlet')
+    ).not.toBeNull();
   });
+
 });
