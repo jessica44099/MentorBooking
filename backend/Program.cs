@@ -49,10 +49,9 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 // =====================================================
-// 2. DATABASE CONFIGURATION
+// 2. SQLITE DATABASE CONFIGURATION
 // =====================================================
 
-// SQLite database connection.
 var connectionString = builder.Configuration
     .GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException(
@@ -64,114 +63,210 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 });
 
 // =====================================================
-// 3. REGISTER APPLICATION SERVICES
+// 3. EMAIL DELIVERY CONFIGURATION — STEP 30.1
 // =====================================================
 
-// Authentication.
+builder.Services.Configure<EmailDeliveryOptions>(
+    builder.Configuration.GetSection(
+        EmailDeliveryOptions.SectionName));
+
+// =====================================================
+// 4. AUTHENTICATION SERVICES
+// =====================================================
+
 builder.Services.AddScoped<
     IAuthService,
     AuthService>();
 
-// Email services.
-builder.Services.AddScoped<
-    IEmailService,
-    FakeEmailService>();
+// =====================================================
+// 5. EMAIL SERVICES — STEP 30
+// =====================================================
+
+// Development:
+//   Fake authentication emails.
+//   Preview queued session emails.
+//
+// Other environments:
+//   Real SMTP for authentication emails.
+//   Real SMTP for queued session emails.
+
+if (builder.Environment.IsDevelopment())
+{
+    // Development authentication emails.
+    builder.Services.AddScoped<
+        IEmailService,
+        FakeEmailService>();
+
+    // Development queued email previews.
+    builder.Services.AddScoped<
+        IQueuedEmailSender,
+        DevelopmentQueuedEmailSender>();
+}
+else
+{
+    // Production/staging authentication emails.
+    builder.Services.AddScoped<
+        IEmailService,
+        SmtpAccountEmailService>();
+
+    // Production/staging queued email delivery.
+    builder.Services.AddScoped<
+        IQueuedEmailSender,
+        SmtpQueuedEmailSender>();
+}
 
 // Email verification and password reset tokens.
 builder.Services.AddScoped<
     IAccountTokenService,
     AccountTokenService>();
 
-// Mentor availability management.
+// =====================================================
+// 6. MENTOR AVAILABILITY MANAGEMENT
+// =====================================================
+
 builder.Services.AddScoped<
     IAvailabilityService,
     AvailabilityService>();
 
-// Student session bookings.
+// =====================================================
+// 7. STUDENT BOOKING SERVICE
+// =====================================================
+
 builder.Services.AddScoped<
     IBookingService,
     BookingService>();
 
-// Session approval, rejection and cancellation.
+// =====================================================
+// 8. SESSION LIFECYCLE SERVICE
+// =====================================================
+
+// Approve, reject and cancel sessions.
 builder.Services.AddScoped<
     ISessionLifecycleService,
     SessionLifecycleService>();
 
-// Session start, completion and No-Show.
+// =====================================================
+// 9. SESSION PROGRESS SERVICE
+// =====================================================
+
+// Start, complete and mark No-Show.
 builder.Services.AddScoped<
     ISessionProgressService,
     SessionProgressService>();
 
-// Mentor profile management.
+// =====================================================
+// 10. MENTOR PROFILE
+// =====================================================
+
 builder.Services.AddScoped<
     IMentorProfileService,
     MentorProfileService>();
 
-// Mentor discovery and search.
+// =====================================================
+// 11. MENTOR DISCOVERY
+// =====================================================
+
 builder.Services.AddScoped<
     IMentorDiscoveryService,
     MentorDiscoveryService>();
 
-// Student reviews and mentor ratings.
+// =====================================================
+// 12. STUDENT REVIEWS
+// =====================================================
+
 builder.Services.AddScoped<
     IReviewService,
     ReviewService>();
 
-// Mentor dashboard statistics.
+// =====================================================
+// 13. MENTOR DASHBOARD STATISTICS
+// =====================================================
+
 builder.Services.AddScoped<
     IMentorDashboardStatsService,
     MentorDashboardStatsService>();
 
-// Completed-session corrections and audit history.
+// =====================================================
+// 14. SESSION RECORD CORRECTIONS
+// =====================================================
+
 builder.Services.AddScoped<
     ISessionRecordCorrectionService,
     SessionRecordCorrectionService>();
 
 // =====================================================
-// 4. STEP 27 — SESSION RESCHEDULING
+// 15. STEP 27 — SESSION RESCHEDULING
 // =====================================================
 
 // Mentor proposes a new session time.
 // Student accepts the proposed time.
+
 builder.Services.AddScoped<
     ISessionRescheduleService,
     SessionRescheduleService>();
 
 // =====================================================
-// 5. STEP 28 — SHIFT HISTORY AND CONFLICT HANDLING
+// 16. STEP 28 — RESCHEDULE SAFETY
 // =====================================================
 
-// View previous rescheduling changes.
-// Preview scheduling conflicts before proposing.
+// Shift history and calendar conflict previews.
+
 builder.Services.AddScoped<
     IRescheduleSafetyService,
     RescheduleSafetyService>();
 
 // =====================================================
-// 6. STEP 29 — STUDENT AND MENTOR NOTIFICATIONS
+// 17. STEP 29 — IN-APP NOTIFICATIONS
 // =====================================================
 
-// Get notifications for the authenticated user.
+// Get the logged-in user's notifications.
 // Count unread notifications.
-// Mark individual or all notifications as read.
+// Mark one or all notifications as read.
+
 builder.Services.AddScoped<
     INotificationService,
     NotificationService>();
 
 // =====================================================
-// 7. BACKGROUND SERVICES
+// 18. STEP 30.2 — EMAIL NOTIFICATION QUEUE
 // =====================================================
 
-// Automatically expire overdue Pending bookings.
+// Creates queued email records in SQLite.
+// Does not send them immediately.
+
+builder.Services.AddScoped<
+    IEmailNotificationQueue,
+    EmailNotificationQueue>();
+
+// =====================================================
+// 19. BACKGROUND SERVICES
+// =====================================================
+
+// Expire overdue Pending bookings.
 builder.Services.AddHostedService<
     PendingExpirationWorker>();
 
-// Automatically expire unanswered reschedule proposals.
+// Expire unanswered reschedule proposals.
 builder.Services.AddHostedService<
     RescheduleExpirationWorker>();
 
 // =====================================================
-// 8. JWT AUTHENTICATION CONFIGURATION
+// 20. STEP 30.5 — BACKGROUND EMAIL WORKER
+// =====================================================
+
+// Register exactly once.
+//
+// When EmailDelivery:Enabled is false,
+// the worker will not process queued emails.
+//
+// In Development, emails are previewed.
+// In other environments, SMTP is used.
+
+builder.Services.AddHostedService<
+    QueuedEmailDeliveryWorker>();
+
+// =====================================================
+// 21. JWT AUTHENTICATION CONFIGURATION
 // =====================================================
 
 var jwtKey = builder.Configuration["Jwt:Key"];
@@ -196,6 +291,7 @@ builder.Services
         JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        // Preserve the original JWT claim names.
         options.MapInboundClaims = false;
 
         options.TokenValidationParameters =
@@ -223,17 +319,17 @@ builder.Services
             };
     });
 
-// Role-based authorization.
+// Enable role-based authorization.
 builder.Services.AddAuthorization();
 
 // =====================================================
-// 9. BUILD APPLICATION
+// 22. BUILD THE APPLICATION
 // =====================================================
 
 var app = builder.Build();
 
 // =====================================================
-// 10. DEVELOPMENT DATABASE SEEDING
+// 23. DEVELOPMENT DATABASE SEEDING
 // =====================================================
 
 if (builder.Configuration.GetValue<bool>("seed"))
@@ -256,7 +352,7 @@ if (builder.Configuration.GetValue<bool>("seed"))
 }
 
 // =====================================================
-// 11. AUTHENTICATION SMOKE TEST
+// 24. AUTHENTICATION SMOKE TEST
 // =====================================================
 
 if (builder.Configuration.GetValue<bool>("auth-smoke"))
@@ -267,8 +363,9 @@ if (builder.Configuration.GetValue<bool>("auth-smoke"))
             "Authentication testing is development-only.");
     }
 
-    var password = Environment.GetEnvironmentVariable(
-        "MENTORBOOKING_TEST_PASSWORD")
+    var password =
+        Environment.GetEnvironmentVariable(
+            "MENTORBOOKING_TEST_PASSWORD")
         ?? throw new InvalidOperationException(
             "Set MENTORBOOKING_TEST_PASSWORD.");
 
@@ -298,7 +395,7 @@ if (builder.Configuration.GetValue<bool>("auth-smoke"))
 }
 
 // =====================================================
-// 12. ACCOUNT TOKEN SMOKE TEST
+// 25. ACCOUNT TOKEN SMOKE TEST
 // =====================================================
 
 if (builder.Configuration.GetValue<bool>("token-smoke"))
@@ -325,7 +422,7 @@ if (builder.Configuration.GetValue<bool>("token-smoke"))
 }
 
 // =====================================================
-// 13. SWAGGER AND HTTPS
+// 26. SWAGGER AND HTTPS
 // =====================================================
 
 if (app.Environment.IsDevelopment())
@@ -339,22 +436,23 @@ else
 }
 
 // =====================================================
-// 14. AUTHENTICATION AND AUTHORIZATION
+// 27. AUTHENTICATION AND AUTHORIZATION
 // =====================================================
 
-// Authentication must run before authorization.
+// Authentication MUST execute before authorization.
+
 app.UseAuthentication();
 
 app.UseAuthorization();
 
 // =====================================================
-// 15. MAP API CONTROLLERS
+// 28. MAP API CONTROLLERS
 // =====================================================
 
 app.MapControllers();
 
 // =====================================================
-// 16. START APPLICATION
+// 29. START APPLICATION
 // =====================================================
 
 app.Run();

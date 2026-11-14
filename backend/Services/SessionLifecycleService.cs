@@ -47,10 +47,7 @@ public sealed class SessionLifecycleService
         _db = db;
     }
 
-    // =====================================================
-    // 1. APPROVE SESSION
-    // =====================================================
-
+    // Mentor approves a session.
     public Task<SessionTransitionResponse> ApproveAsync(
         Guid mentorId,
         Guid sessionId,
@@ -66,10 +63,7 @@ public sealed class SessionLifecycleService
             ct);
     }
 
-    // =====================================================
-    // 2. REJECT SESSION
-    // =====================================================
-
+    // Mentor rejects a session.
     public Task<SessionTransitionResponse> RejectAsync(
         Guid mentorId,
         Guid sessionId,
@@ -85,10 +79,7 @@ public sealed class SessionLifecycleService
             ct);
     }
 
-    // =====================================================
-    // 3. CANCEL SESSION
-    // =====================================================
-
+    // Student or mentor cancels a session.
     public Task<SessionTransitionResponse> CancelAsync(
         Guid actorId,
         Guid sessionId,
@@ -104,10 +95,7 @@ public sealed class SessionLifecycleService
             ct);
     }
 
-    // =====================================================
-    // 4. COMMON SESSION STATUS TRANSITION
-    // =====================================================
-
+    // Common lifecycle transition method.
     private async Task<SessionTransitionResponse> ChangeStatusAsync(
         Guid actorId,
         Guid sessionId,
@@ -125,10 +113,7 @@ public sealed class SessionLifecycleService
                     IsolationLevel.Serializable,
                     ct);
 
-            // =================================================
-            // VALIDATE USER
-            // =================================================
-
+            // Validate current user.
             var actor = await _db.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
@@ -142,13 +127,7 @@ public sealed class SessionLifecycleService
                     "Account not found or inactive.");
             }
 
-            // =================================================
-            // LOAD SESSION
-            // =================================================
-
-            // AsNoTracking is required because we later
-            // update with a conditional SQL operation.
-
+            // Load session without tracking.
             var session = await _db.Sessions
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
@@ -161,10 +140,7 @@ public sealed class SessionLifecycleService
                     "Session not found.");
             }
 
-            // =================================================
-            // VALIDATE OWNERSHIP
-            // =================================================
-
+            // Validate session ownership.
             if (action == ActionType.Approve ||
                 action == ActionType.Reject)
             {
@@ -207,14 +183,10 @@ public sealed class SessionLifecycleService
 
             string? validatedMeetingInfo = null;
 
-            // =================================================
-            // DETERMINE NEW SESSION STATUS
-            // =================================================
-
+            // Determine new status.
             switch (action)
             {
                 case ActionType.Approve:
-
                     if (!actor.IsEmailVerified)
                     {
                         throw new SessionLifecycleForbiddenException(
@@ -230,21 +202,17 @@ public sealed class SessionLifecycleService
                         meetingInfo);
 
                     newStatus = SessionStatus.Approved;
-
                     break;
 
                 case ActionType.Reject:
-
                     EnsurePending(session, "reject");
 
                     EnsurePendingNotOverdue(session, now);
 
                     newStatus = SessionStatus.Rejected;
-
                     break;
 
                 case ActionType.Cancel:
-
                     ValidateCancellation(
                         session,
                         actor.Role,
@@ -252,21 +220,16 @@ public sealed class SessionLifecycleService
                         now);
 
                     newStatus = SessionStatus.Cancelled;
-
                     break;
 
                 default:
-
                     throw new InvalidOperationException(
                         "Unsupported lifecycle action.");
             }
 
-            // =================================================
-            // CONCURRENCY PROTECTION
-            // =================================================
-
+            // Conditional SQL update prevents
+            // overwriting another status transition.
             var originalVersion = session.RowVersion;
-
             var nextVersion = Guid.NewGuid();
 
             IQueryable<Session> matchingSession =
@@ -275,8 +238,7 @@ public sealed class SessionLifecycleService
                          x.Status == previousStatus &&
                          x.RowVersion == originalVersion);
 
-            // Recheck the Pending deadline inside SQL.
-
+            // Enforce Pending deadline again in SQL.
             if (previousStatus == SessionStatus.Pending)
             {
                 var approvalCutoff = now.AddHours(
@@ -287,8 +249,7 @@ public sealed class SessionLifecycleService
                          x.ScheduledStartUtc > now);
             }
 
-            // Recheck Approved cancellation deadlines.
-
+            // Enforce Approved cancellation deadlines.
             if (action == ActionType.Cancel &&
                 previousStatus == SessionStatus.Approved)
             {
@@ -310,10 +271,7 @@ public sealed class SessionLifecycleService
 
             int updatedRows;
 
-            // =================================================
-            // APPLY APPROVAL
-            // =================================================
-
+            // Apply approval.
             if (action == ActionType.Approve)
             {
                 updatedRows = await matchingSession
@@ -334,10 +292,7 @@ public sealed class SessionLifecycleService
                         ct);
             }
 
-            // =================================================
-            // APPLY REJECTION
-            // =================================================
-
+            // Apply rejection.
             else if (action == ActionType.Reject)
             {
                 updatedRows = await matchingSession
@@ -355,10 +310,7 @@ public sealed class SessionLifecycleService
                         ct);
             }
 
-            // =================================================
-            // APPLY CANCELLATION
-            // =================================================
-
+            // Apply cancellation.
             else
             {
                 updatedRows = await matchingSession
@@ -380,10 +332,7 @@ public sealed class SessionLifecycleService
                     "passed. Refresh and try again.");
             }
 
-            // =================================================
-            // RECORD SESSION STATUS HISTORY
-            // =================================================
-
+            // Record status transition.
             string historyReason = action switch
             {
                 ActionType.Approve =>
@@ -399,36 +348,15 @@ public sealed class SessionLifecycleService
                 new SessionStatusHistory
                 {
                     Id = Guid.NewGuid(),
-
                     SessionId = session.Id,
-
                     FromStatus = previousStatus,
-
                     ToStatus = newStatus,
-
                     ChangedByUserId = actor.Id,
-
                     Reason = historyReason,
-
                     ChangedAtUtc = now
                 });
 
-            // =================================================
-            // STEP 29.6 — CREATE NOTIFICATION
-            // =================================================
-
-            // Approved:
-            //   Notify the student.
-            //
-            // Rejected:
-            //   Notify the student.
-            //
-            // Cancelled by student:
-            //   Notify the mentor.
-            //
-            // Cancelled by mentor:
-            //   Notify the student.
-
+            // STEP 29: Create in-app notification.
             NotificationEvents.LifecycleChanged(
                 _db,
                 session,
@@ -436,20 +364,16 @@ public sealed class SessionLifecycleService
                 actor.Id,
                 now);
 
-            // =================================================
-            // SAVE ALL CHANGES IN ONE TRANSACTION
-            // =================================================
+            // STEP 30.3: Queue email for the recipient.
+            await NotificationEmailBridge.QueuePendingAsync(
+                _db,
+                ct);
 
-            // The session status update, status history,
-            // and notification are committed together.
-
+            // Commit status, history, notification
+            // and email queue as one transaction.
             await _db.SaveChangesAsync(ct);
 
             await transaction.CommitAsync(ct);
-
-            // =================================================
-            // RETURN RESPONSE
-            // =================================================
 
             string message = action switch
             {
@@ -468,11 +392,6 @@ public sealed class SessionLifecycleService
                 now,
                 message);
         }
-
-        // =================================================
-        // ERROR HANDLING
-        // =================================================
-
         catch (DbUpdateConcurrencyException ex)
         {
             throw new SessionLifecycleConflictException(
@@ -480,7 +399,6 @@ public sealed class SessionLifecycleService
                 "Refresh and try again.",
                 ex);
         }
-
         catch (SqliteException ex)
             when (ex.SqliteErrorCode is 5 or 6)
         {
@@ -488,7 +406,6 @@ public sealed class SessionLifecycleService
                 "Session is being updated. Please retry.",
                 ex);
         }
-
         catch (DbUpdateException ex)
             when (ex.InnerException is SqliteException sqlite &&
                   sqlite.SqliteErrorCode is 5 or 6)
@@ -499,10 +416,7 @@ public sealed class SessionLifecycleService
         }
     }
 
-    // =====================================================
-    // 5. VALIDATE PENDING SESSION STATUS
-    // =====================================================
-
+    // Ensure the session is Pending.
     private static void EnsurePending(
         Session session,
         string action)
@@ -515,10 +429,7 @@ public sealed class SessionLifecycleService
         }
     }
 
-    // =====================================================
-    // 6. VALIDATE PENDING APPROVAL DEADLINE
-    // =====================================================
-
+    // Ensure the Pending deadline has not passed.
     private static void EnsurePendingNotOverdue(
         Session session,
         DateTime now)
@@ -534,10 +445,7 @@ public sealed class SessionLifecycleService
         }
     }
 
-    // =====================================================
-    // 7. VALIDATE CANCELLATION
-    // =====================================================
-
+    // Validate cancellation rules.
     private static void ValidateCancellation(
         Session session,
         UserRole actorRole,
@@ -553,9 +461,7 @@ public sealed class SessionLifecycleService
                 $"{session.Status}.");
         }
 
-        // NeedsReschedule can be cancelled while
-        // the proposal is still unresolved.
-
+        // A pending reschedule can be cancelled.
         if (session.Status == SessionStatus.NeedsReschedule)
         {
             return;
@@ -582,10 +488,7 @@ public sealed class SessionLifecycleService
         }
     }
 
-    // =====================================================
-    // 8. NORMALIZE REJECTION / CANCELLATION REASON
-    // =====================================================
-
+    // Normalize optional cancellation/rejection reason.
     private static string? NormalizeReason(string? reason)
     {
         var value = reason?.Trim();
@@ -604,10 +507,7 @@ public sealed class SessionLifecycleService
         return value;
     }
 
-    // =====================================================
-    // 9. VALIDATE SESSION MEETING INFORMATION
-    // =====================================================
-
+    // Validate meeting information by session mode.
     private static string ValidateMeetingInfo(
         SessionMode mode,
         string? meetingInfo)
@@ -624,9 +524,7 @@ public sealed class SessionLifecycleService
 
         switch (mode)
         {
-            // Zoom meetings must use an HTTPS Zoom link.
             case SessionMode.Zoom:
-
                 if (!Uri.TryCreate(
                         value,
                         UriKind.Absolute,
@@ -638,12 +536,9 @@ public sealed class SessionLifecycleService
                     throw new ArgumentException(
                         "Enter a valid HTTPS Zoom meeting link.");
                 }
-
                 break;
 
-            // Phone calls require 10 to 15 digits.
             case SessionMode.Call:
-
                 var digits = new string(
                     value.Where(char.IsDigit).ToArray());
 
@@ -663,23 +558,18 @@ public sealed class SessionLifecycleService
                         "Enter a valid phone number " +
                         "containing 10 to 15 digits.");
                 }
-
                 break;
 
-            // Text session instructions.
             case SessionMode.Text:
-
                 if (value.Length < 10)
                 {
                     throw new ArgumentException(
                         "Chat instructions must contain " +
                         "at least 10 characters.");
                 }
-
                 break;
 
             default:
-
                 throw new ArgumentException(
                     "Unsupported session mode.");
         }
@@ -687,24 +577,18 @@ public sealed class SessionLifecycleService
         return value;
     }
 
-    // =====================================================
-    // 10. VALIDATE ZOOM DOMAIN
-    // =====================================================
-
+    // Only accept legitimate Zoom domains.
     private static bool IsZoomHost(string host)
     {
         return host.Equals(
                    "zoom.us",
                    StringComparison.OrdinalIgnoreCase) ||
-
                host.EndsWith(
                    ".zoom.us",
                    StringComparison.OrdinalIgnoreCase) ||
-
                host.Equals(
                    "zoom.com",
                    StringComparison.OrdinalIgnoreCase) ||
-
                host.EndsWith(
                    ".zoom.com",
                    StringComparison.OrdinalIgnoreCase);

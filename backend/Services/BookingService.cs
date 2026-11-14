@@ -46,10 +46,7 @@ public sealed class BookingService : IBookingService
         }
     }
 
-    // =====================================================
-    // CREATE STUDENT BOOKING
-    // =====================================================
-
+    // Create a student booking.
     public async Task<BookingResponse> CreateAsync(
         Guid studentId,
         CreateBookingRequest request,
@@ -72,10 +69,7 @@ public sealed class BookingService : IBookingService
                     IsolationLevel.Serializable,
                     ct);
 
-            // =================================================
-            // 1. VALIDATE STUDENT
-            // =================================================
-
+            // Validate student.
             var student = await _db.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
@@ -96,10 +90,7 @@ public sealed class BookingService : IBookingService
                     "Verify your email before booking.");
             }
 
-            // =================================================
-            // 2. VALIDATE MENTOR
-            // =================================================
-
+            // Validate mentor.
             var mentor = await _db.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
@@ -114,10 +105,7 @@ public sealed class BookingService : IBookingService
                     "Mentor not found.");
             }
 
-            // =================================================
-            // 3. VALIDATE AVAILABILITY SLOT
-            // =================================================
-
+            // Validate available slot.
             var slot = await _db.AvailabilitySlots
                 .AsNoTracking()
                 .FirstOrDefaultAsync(
@@ -140,10 +128,7 @@ public sealed class BookingService : IBookingService
                     "inside the selected Available slot.");
             }
 
-            // =================================================
-            // 4. CHECK MENTOR BUSY CALENDAR BLOCKS
-            // =================================================
-
+            // Busy calendar blocks take priority.
             var busyConflict =
                 await _db.AvailabilitySlots.AnyAsync(
                     x => x.MentorId == mentor.Id &&
@@ -163,20 +148,10 @@ public sealed class BookingService : IBookingService
             var approvalCutoff = now.AddHours(
                 -PendingBookingDeadline.ApprovalHours);
 
-            // A time is reserved by:
-            //
-            // Approved
-            // InProgress
-            // NeedsReschedule
-            // Pending (if not overdue)
-            //
-            // Cancelled, Rejected, Expired, Completed,
-            // and NoShow sessions do not reserve time.
+            // Approved, InProgress, NeedsReschedule,
+            // and valid Pending bookings reserve time.
 
-            // =================================================
-            // 5. CHECK MENTOR BOOKING CONFLICTS
-            // =================================================
-
+            // Check mentor's other sessions.
             var mentorConflict = await _db.Sessions
                 .AnyAsync(
                     x => x.MentorId == mentor.Id &&
@@ -209,10 +184,7 @@ public sealed class BookingService : IBookingService
                     "Please pick another.");
             }
 
-            // =================================================
-            // 6. CHECK STUDENT BOOKING CONFLICTS
-            // =================================================
-
+            // Check student's other sessions.
             var studentConflict = await _db.Sessions
                 .AnyAsync(
                     x => x.StudentId == student.Id &&
@@ -245,10 +217,7 @@ public sealed class BookingService : IBookingService
                     "scheduled during this time.");
             }
 
-            // =================================================
-            // 7. CREATE SESSION
-            // =================================================
-
+            // Create the new Pending session.
             var createdAtUtc = DateTime.UtcNow;
 
             var session = new Session
@@ -276,10 +245,7 @@ public sealed class BookingService : IBookingService
 
             _db.Sessions.Add(session);
 
-            // =================================================
-            // 8. RECORD INITIAL STATUS HISTORY
-            // =================================================
-
+            // Record initial status history.
             _db.SessionStatusHistory.Add(
                 new SessionStatusHistory
                 {
@@ -292,26 +258,18 @@ public sealed class BookingService : IBookingService
                     ChangedAtUtc = createdAtUtc
                 });
 
-            // =================================================
-            // 9. STEP 29 — CREATE MENTOR NOTIFICATION
-            // =================================================
-
-            // A successful booking creates an unread
-            // notification for the assigned mentor.
-            //
-            // The notification is added to the same
-            // DbContext and saved in the same transaction
-            // as the session and its status history.
-
+            // STEP 29: Create mentor notification.
             NotificationEvents.BookingRequested(
                 _db,
                 session,
                 createdAtUtc);
 
-            // =================================================
-            // 10. SAVE ALL CHANGES
-            // =================================================
+            // STEP 30.3: Queue mentor email.
+            await NotificationEmailBridge.QueuePendingAsync(
+                _db,
+                ct);
 
+            // Save everything in one transaction.
             await _db.SaveChangesAsync(ct);
 
             await transaction.CommitAsync(ct);
@@ -344,10 +302,7 @@ public sealed class BookingService : IBookingService
         }
     }
 
-    // =====================================================
-    // VALIDATE BOOKING REQUEST
-    // =====================================================
-
+    // Validate the booking request.
     private SessionMode ValidateRequest(
         CreateBookingRequest request)
     {
@@ -447,10 +402,7 @@ public sealed class BookingService : IBookingService
         return mode;
     }
 
-    // =====================================================
-    // CONVERT SESSION TO BOOKING RESPONSE
-    // =====================================================
-
+    // Return the existing booking response shape.
     private static BookingResponse ToResponse(
         Session session)
     {
