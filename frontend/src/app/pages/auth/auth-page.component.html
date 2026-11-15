@@ -1,0 +1,60 @@
+<main class="auth-wrap">
+  <section class="auth-card" aria-labelledby="auth-title">
+    <span class="eyebrow">MENTORBOOKING</span>
+    @switch (mode) {
+      @case ('login') {
+        <h1 id="auth-title">Welcome back</h1>
+        <p class="intro">Sign in to manage your free doubt-clearing sessions.</p>
+        <form [formGroup]="loginForm" (ngSubmit)="submit()">
+          <label>Email<input type="email" formControlName="email" autocomplete="email" required /></label>
+          <label>Password<input type="password" formControlName="password" autocomplete="current-password" required /></label>
+          <button class="btn btn-primary" type="submit" [disabled]="busy">{{ busy ? 'Signing inâ€¦' : 'Log in' }}</button>
+        </form>
+        <div class="links"><a routerLink="/forgot-password">Forgot password?</a><a routerLink="/register">Create an account</a></div>
+      }
+      @case ('register') {
+        <h1 id="auth-title">Create your account</h1>
+        <p class="intro">Join as a student or mentor. Sessions are free.</p>
+        <form [formGroup]="registerForm" (ngSubmit)="submit()">
+          <label>Full name<input type="text" formControlName="name" maxlength="150" autocomplete="name" required /></label>
+          <label>Email<input type="email" formControlName="email" autocomplete="email" required /></label>
+          <label>I am a
+            <select formControlName="role"><option value="Student">Student</option><option value="Mentor">Mentor</option></select>
+          </label>
+          <label>Password<input type="password" formControlName="password" autocomplete="new-password" required /></label>
+          <small>At least 8 characters, including a letter and number.</small>
+          <label>Confirm password<input type="password" formControlName="confirmPassword" autocomplete="new-password" required /></label>
+          <button class="btn btn-primary" type="submit" [disabled]="busy">{{ busy ? 'Creating accountâ€¦' : 'Register' }}</button>
+        </form>
+        <div class="links"><span>Already registered?</span><a routerLink="/login">Log in</a></div>
+      }
+      @case ('forgot') {
+        <h1 id="auth-title">Reset your password</h1>
+        <p class="intro">Enter your account email. If it exists, we'll send a reset link.</p>
+        <form [formGroup]="forgotForm" (ngSubmit)="submit()">
+          <label>Email<input type="email" formControlName="email" autocomplete="email" required /></label>
+          <button class="btn btn-primary" type="submit" [disabled]="busy">{{ busy ? 'Sendingâ€¦' : 'Send reset link' }}</button>
+        </form>
+        <div class="links"><a routerLink="/login">Back to login</a></div>
+      }
+      @case ('reset') {
+        <h1 id="auth-title">Choose a new password</h1>
+        <p class="intro">Reset links are valid for 30 minutes and can be used once.</p>
+        <form [formGroup]="resetForm" (ngSubmit)="submit()">
+          <label>New password<input type="password" formControlName="password" autocomplete="new-password" required /></label>
+          <label>Confirm password<input type="password" formControlName="confirmPassword" autocomplete="new-password" required /></label>
+          <button class="btn btn-primary" type="submit" [disabled]="busy || !token">{{ busy ? 'Savingâ€¦' : 'Reset password' }}</button>
+        </form>
+        <div class="links"><a routerLink="/forgot-password">Request a new link</a></div>
+      }
+      @case ('verify') {
+        <h1 id="auth-title">Verify your email</h1>
+        <p class="intro">Confirm your email address to unlock session booking and approvals.</p>
+        <button class="btn btn-primary" type="button" [disabled]="busy || !token" (click)="verify()">{{ busy ? 'Verifyingâ€¦' : 'Verify email' }}</button>
+        <div class="links"><a routerLink="/login">Back to login</a></div>
+      }
+    }
+    @if (error) { <p class="feedback error" role="alert">{{ error }}</p> }
+    @if (message) { <p class="feedback success" role="status">{{ message }}</p> }
+  </section>
+</main>

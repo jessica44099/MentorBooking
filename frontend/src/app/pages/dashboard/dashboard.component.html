@@ -1,0 +1,42 @@
+<main class="container dashboard">
+  <header class="dashboard-head">
+    <div>
+      <span class="eyebrow">{{ role() === 'Mentor' ? 'MENTOR PORTAL' : 'STUDENT PORTAL' }}</span>
+      <h1>Welcome, {{ user()?.name }}</h1>
+      <p>Sessions shown below are loaded from your account's real API data.</p>
+    </div>
+    <button class="btn btn-outline" type="button" (click)="logout()">Log out</button>
+  </header>
+
+  @if (!user()?.isEmailVerified) {
+    <section class="notice" aria-label="Email verification required">
+      <div><strong>Verify your email.</strong><p>Booking and approval require a verified email address. In development, check the backend terminal for the link.</p></div>
+      <button class="btn btn-primary" type="button" [disabled]="sending" (click)="resendVerification()">{{ sending ? 'Sendingâ€¦' : 'Resend link' }}</button>
+    </section>
+  }
+
+  @if (message) { <p class="feedback success" role="status">{{ message }}</p> }
+  @if (error) { <p class="feedback error" role="alert">{{ error }} <a routerLink="/login">Log in</a></p> }
+
+  <section class="sessions">
+    <div class="section-head">
+      <h2>Your sessions</h2>
+      <button class="btn btn-outline" type="button" (click)="loadSessions()" [disabled]="loading">Refresh</button>
+    </div>
+    @if (loading) {
+      <p role="status">Loading sessionsâ€¦</p>
+    } @else if (!error && sessions.length === 0) {
+      <p class="empty">No sessions booked yet.</p>
+    } @else {
+      <div class="session-grid">
+        @for (session of sessions; track session.id) {
+          <article class="session-card">
+            <div class="row"><strong>{{ session.topic }}</strong><span class="status">{{ session.status }}</span></div>
+            <p>{{ session.description }}</p>
+            <div class="meta"><span>{{ session.scheduledStartUtc | date:'medium' }}</span><span>{{ session.mode }}</span></div>
+          </article>
+        }
+      </div>
+    }
+  </section>
+</main>

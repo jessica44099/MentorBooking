@@ -1,0 +1,185 @@
+<main class="container mentor-dashboard">
+  <header class="page-heading">
+    <div>
+      <span class="eyebrow">MENTOR PORTAL</span>
+      <h1>Mentor Dashboard</h1>
+      <p>Welcome, {{ auth.user()?.name }}. Manage your real profile, calendar and student sessions.</p>
+    </div>
+    <button class="btn btn-outline" type="button" (click)="refreshSessions()">Refresh data</button>
+  </header>
+
+  @if (!auth.user()?.isEmailVerified) {
+    <p class="notice">Your email is not yet verified. You can edit your profile, but approving bookings requires verification. Use the resend option on your account dashboard.</p>
+  }
+
+  @if (error) { <p class="feedback error" role="alert">{{ error }}</p> }
+  @if (success) { <p class="feedback success" role="status">{{ success }}</p> }
+
+  @if (stats; as overview) {
+    <section class="stats" aria-label="Mentor statistics">
+      <div><strong>{{ overview.completedSessions }}</strong><span>Completed sessions</span></div>
+      <div><strong>{{ overview.studentsHelped }}</strong><span>Students helped</span></div>
+      <div><strong>{{ overview.doubtsCleared }}</strong><span>Doubts cleared</span></div>
+      <div><strong>{{ overview.hoursMentored }}</strong><span>Hours mentored</span></div>
+    </section>
+  }
+
+  <nav class="tabs" aria-label="Mentor dashboard sections">
+    <button type="button" [class.active]="activeTab === 'profile'" (click)="showTab('profile')">My Profile</button>
+    <button type="button" [class.active]="activeTab === 'calendar'" [disabled]="!profile?.isComplete" (click)="showTab('calendar')">My Calendar</button>
+    <button type="button" [class.active]="activeTab === 'sessions'" [disabled]="!profile?.isComplete" (click)="showTab('sessions')">My Sessions</button>
+  </nav>
+
+  @if (loadingProfile) { <p role="status">Loading your profileâ€¦</p> }
+
+  @if (activeTab === 'profile') {
+    <section class="panel profile-panel" aria-label="My profile">
+      <div class="section-heading">
+        <div><h2>My Profile</h2><p>Choose your subjects and save a public mentor bio.</p></div>
+        @if (profile?.isComplete) { <span class="status complete">Profile complete</span> }
+      </div>
+      <div class="profile-grid">
+        <div>
+          <h3>Teaching subjects</h3>
+          <p class="hint">Choose any combination of Quant, VARC and DILR.</p>
+          <div class="subject-choices">
+            @for (subject of subjectOptions; track subject) {
+              <label class="subject-option">
+                <input type="checkbox" [checked]="subjects.includes(subject)" (change)="toggleSubject(subject)" />
+                <span>{{ subject }}</span>
+              </label>
+            }
+          </div>
+        </div>
+        <label class="bio-label">About me
+          <textarea rows="7" [(ngModel)]="bio" maxlength="2000" placeholder="Share your teaching background, approach and the topics you can help with."></textarea>
+          <small>{{ bio.length }}/2000 characters Â· minimum 20</small>
+        </label>
+      </div>
+      <div class="panel-actions">
+        <button class="btn btn-primary" type="button" (click)="saveProfile()" [disabled]="savingProfile || loadingProfile">{{ savingProfile ? 'Savingâ€¦' : 'Save profile' }}</button>
+        @if (profile?.isComplete) { <button class="btn btn-outline" type="button" (click)="showTab('calendar')">Go to calendar</button> }
+      </div>
+    </section>
+  }
+
+  @if (activeTab === 'calendar' && profile?.isComplete) {
+    <section class="panel" aria-label="My calendar">
+      <div class="section-heading calendar-top">
+        <div><h2>My Calendar</h2><p>Click a future time cell to create or edit a saved Available/Busy slot.</p></div>
+        <div class="week-controls">
+          <button type="button" class="small-btn" (click)="goToday()">Today</button>
+          <button type="button" class="small-btn" aria-label="Previous week" (click)="changeWeek(-1)">â€¹</button>
+          <strong>{{ weekLabel() }}</strong>
+          <button type="button" class="small-btn" aria-label="Next week" (click)="changeWeek(1)">â€º</button>
+        </div>
+      </div>
+      <div class="legend"><span><i class="dot available"></i> Published available</span><span><i class="dot busy"></i> Busy</span><span><i class="dot reserved"></i> Reserved session</span><span><i class="dot unpublished"></i> Unpublished</span></div>
+      @if (loadingCalendar) { <p role="status">Loading calendarâ€¦</p> }
+      <div class="calendar-scroll" role="region" aria-label="Weekly calendar" tabindex="0">
+        <div class="week-grid">
+          <div class="grid-heading time-header">IST</div>
+          @for (day of weekDays; track day) { <div class="grid-heading">{{ weekDayLabel(day) }}</div> }
+          @for (slotIndex of halfHours; track slotIndex) {
+            <div class="time-label">{{ hourLabel(slotIndex) }}</div>
+            @for (day of weekDays; track day) {
+              <button type="button" class="calendar-cell"
+                [class.available]="cellStatus(day, slotIndex) === 'Available'"
+                [class.busy]="cellStatus(day, slotIndex) === 'Busy'"
+                [class.reserved]="cellStatus(day, slotIndex) === 'Reserved'"
+                [attr.aria-label]="weekDayLabel(day) + ' ' + hourLabel(slotIndex) + ': ' + cellDescription(day, slotIndex)"
+                (click)="openCell(day, slotIndex)">
+                <span>{{ cellDescription(day, slotIndex) }}</span>
+              </button>
+            }
+          }
+        </div>
+      </div>
+      <p class="calendar-hint">Only published Available slots can be booked. Unpublished time is not bookable, even if it appears empty.</p>
+    </section>
+
+    @if (editorOpen) {
+      <div class="modal-backdrop" role="presentation">
+        <section class="event-editor" role="dialog" aria-modal="true" aria-label="Edit calendar slot">
+          <div class="section-heading"><h2>{{ editingSlot ? 'Edit saved slot' : 'Add calendar slot' }}</h2><button type="button" class="small-btn" aria-label="Close editor" (click)="closeEditor()">Ã—</button></div>
+          <p>Starts {{ editorStartUtc | date:'EEE, d MMM, h:mm a':'+0530' }} IST</p>
+          <label>Slot type
+            <select [(ngModel)]="editorType"><option value="Available">Available (students may book)</option><option value="Busy">Busy (unavailable)</option></select>
+          </label>
+          <label>Duration in minutes (30â€“480)
+            <input type="number" [(ngModel)]="editorMinutes" min="30" max="480" step="15" />
+          </label>
+          <label>Note or activity description (optional)
+            <textarea [(ngModel)]="editorNote" rows="3" maxlength="500" placeholder="e.g. Break, class, or Quant sessions"></textarea>
+          </label>
+          <div class="editor-buttons">
+            @if (editingSlot) { <button type="button" class="btn danger" [disabled]="savingSlot" (click)="deleteSlot()">Delete</button> }
+            <button type="button" class="btn btn-outline" (click)="closeEditor()">Cancel</button>
+            <button type="button" class="btn btn-primary" [disabled]="savingSlot" (click)="saveSlot()">{{ savingSlot ? 'Savingâ€¦' : 'Save slot' }}</button>
+          </div>
+        </section>
+      </div>
+    }
+  }
+
+  @if (activeTab === 'sessions' && profile?.isComplete) {
+    <section class="panel sessions-panel" aria-label="My sessions">
+      <div class="section-heading"><div><h2>My Sessions</h2><p>All records and status changes are loaded from the backend.</p></div><button type="button" class="btn btn-outline" [disabled]="loadingSessions" (click)="refreshSessions()">Refresh</button></div>
+      @if (loadingSessions) { <p role="status">Loading sessionsâ€¦</p> }
+      <h3>Requests ({{ requests.length }})</h3>
+      @if (!loadingSessions && requests.length === 0) { <p class="empty">No pending booking requests.</p> }
+      @for (session of requests; track session.id) {
+        <article class="session-card">
+          <div class="session-top"><strong>{{ session.topic }}</strong><span class="status">{{ session.status }}</span></div>
+          <p>{{ session.description }}</p>
+          <div class="meta"><span>{{ session.scheduledStartUtc | date:'EEE, d MMM, h:mm a':'+0530' }} IST</span><span>{{ session.mode }}</span><span>Student ID: {{ session.studentId }}</span></div>
+          <div class="actions"><button type="button" class="btn btn-primary" [disabled]="processingSession" (click)="openAction(session.id, 'approve')">Approve</button><button type="button" class="btn btn-outline" [disabled]="processingSession" (click)="openAction(session.id, 'reject')">Reject</button></div>
+          @if (actionId === session.id) { <ng-container [ngTemplateOutlet]="actionPanel"></ng-container> }
+        </article>
+      }
+      <h3>Upcoming / active ({{ upcoming.length }})</h3>
+      @if (!loadingSessions && upcoming.length === 0) { <p class="empty">No active or approved sessions.</p> }
+      @for (session of upcoming; track session.id) {
+        <article class="session-card">
+          <div class="session-top"><strong>{{ session.topic }}</strong><span class="status">{{ session.status }}</span></div>
+          <p>{{ session.description }}</p>
+          <div class="meta"><span>{{ session.scheduledStartUtc | date:'EEE, d MMM, h:mm a':'+0530' }} IST</span><span>{{ session.mode }}</span><span>Student ID: {{ session.studentId }}</span></div>
+          <div class="actions">
+            @if (session.status === 'Approved') { <button type="button" class="btn btn-primary" [disabled]="processingSession" (click)="startSession(session.id)">Start session</button> }
+            @if (session.status === 'InProgress') { <button type="button" class="btn btn-primary" [disabled]="processingSession" (click)="openAction(session.id, 'complete')">Complete session</button> }
+            @if (session.status === 'Approved' || session.status === 'NeedsReschedule') { <button type="button" class="btn btn-outline" [disabled]="processingSession" (click)="openAction(session.id, 'cancel')">Cancel</button> }
+            @if (session.status === 'Approved' || session.status === 'InProgress') { <button type="button" class="btn btn-outline" [disabled]="processingSession" (click)="markNoShow(session.id)">Mark no-show</button> }
+          </div>
+          @if (actionId === session.id) { <ng-container [ngTemplateOutlet]="actionPanel"></ng-container> }
+        </article>
+      }
+      <h3>Past / closed ({{ history.length }})</h3>
+      @if (!loadingSessions && history.length === 0) { <p class="empty">No completed, cancelled, rejected or expired sessions.</p> }
+      @for (session of history; track session.id) {
+        <article class="session-card">
+          <div class="session-top"><strong>{{ session.topic }}</strong><span class="status">{{ session.status }}</span></div>
+          <div class="meta"><span>{{ session.scheduledStartUtc | date:'EEE, d MMM, h:mm a':'+0530' }} IST</span><span>{{ session.mode }}</span></div>
+        </article>
+      }
+    </section>
+  }
+
+  <ng-template #actionPanel>
+    <section class="inline-editor" aria-label="Session action details">
+      @if (actionKind === 'approve') {
+        <label>Meeting information (required)
+          <textarea [(ngModel)]="actionText" maxlength="1500" rows="2" placeholder="Zoom: HTTPS Zoom link â€¢ Call: phone number â€¢ Text: instructions (10+ characters)"></textarea>
+        </label>
+      } @else if (actionKind === 'reject' || actionKind === 'cancel') {
+        <label>Reason (optional)
+          <textarea [(ngModel)]="actionText" maxlength="500" rows="2"></textarea>
+        </label>
+      } @else if (actionKind === 'complete') {
+        <label>Doubts cleared (0â€“20)<input type="number" [(ngModel)]="completionDoubts" min="0" max="20" /></label>
+        <label>Session summary<textarea [(ngModel)]="completionSummary" rows="3" maxlength="500"></textarea></label>
+        <label>Resolution<select [(ngModel)]="completionResolution"><option value="FullyResolved">Fully resolved</option><option value="PartlyResolved">Partly resolved</option><option value="NeedsFollowUp">Needs follow-up</option></select></label>
+      }
+      <div class="actions"><button type="button" class="btn btn-outline" (click)="closeAction()">Cancel</button><button type="button" class="btn btn-primary" [disabled]="processingSession" (click)="submitAction()">{{ processingSession ? 'Savingâ€¦' : 'Confirm action' }}</button></div>
+    </section>
+  </ng-template>
+</main>

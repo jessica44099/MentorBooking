@@ -1,5 +1,6 @@
-import { Component } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Component, inject } from '@angular/core';
+import { Router, RouterLink } from '@angular/router';
+import { AuthService } from '../core/auth/auth.service';
 
 @Component({
   selector: 'app-site-header',
@@ -9,13 +10,17 @@ import { RouterLink } from '@angular/router';
     <header class="header">
       <div class="container inner">
         <a class="brand" routerLink="/" aria-label="MentorBooking homepage">
-          <span class="mark" aria-hidden="true">M</span>
-          MentorBooking
+          <span class="mark" aria-hidden="true">M</span> MentorBooking
         </a>
         <nav aria-label="Main navigation">
           <a routerLink="/">Home</a>
-          <a routerLink="/" fragment="how-it-works">How it works</a>
-          <a routerLink="/" fragment="api-status">API status</a>
+          @if (auth.isAuthenticated()) {
+            <a [routerLink]="auth.dashboardUrl()">My dashboard</a>
+            <button type="button" class="nav-action" (click)="logout()">Log out</button>
+          } @else {
+            <a routerLink="/login">Log in</a>
+            <a routerLink="/register" class="join">Join free</a>
+          }
         </nav>
       </div>
     </header>
@@ -25,10 +30,19 @@ import { RouterLink } from '@angular/router';
     .inner { min-height: 68px; display: flex; gap: 24px; align-items: center; justify-content: space-between; }
     .brand { display: inline-flex; gap: 10px; align-items: center; color: var(--ink); font-weight: 800; font-size: 19px; text-decoration: none; white-space: nowrap; }
     .mark { display: inline-grid; width: 33px; height: 33px; place-items: center; border-radius: 9px; background: var(--brand); color: white; font-weight: 800; }
-    nav { display: flex; gap: 24px; align-items: center; }
-    nav a { color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 600; }
-    nav a:hover { color: var(--brand); }
-    @media (max-width: 570px) { .inner { flex-wrap: wrap; gap: 8px; padding-block: 13px; } nav { width: 100%; justify-content: space-between; gap: 12px; } }
+    nav { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+    nav a, .nav-action { background: transparent; border: 0; padding: 0; color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 650; cursor: pointer; }
+    nav a:hover, .nav-action:hover { color: var(--brand); }
+    nav a.join { background: var(--brand); color: white; padding: 10px 13px; border-radius: 9px; }
+    @media (max-width: 570px) { .inner { flex-wrap: wrap; gap: 12px; padding-block: 13px; } nav { width: 100%; justify-content: flex-start; gap: 16px; } }
   `]
 })
-export class SiteHeaderComponent {}
+export class SiteHeaderComponent {
+  readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
+
+  logout(): void {
+    this.auth.logout();
+    void this.router.navigateByUrl('/login');
+  }
+}

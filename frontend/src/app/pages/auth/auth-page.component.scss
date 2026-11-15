@@ -1,0 +1,18 @@
+.auth-wrap { min-height: 68vh; display: grid; place-items: center; padding: 48px 20px; }
+.auth-card { width: min(100%, 440px); background: white; border: 1px solid var(--border); border-radius: 18px; padding: 30px; box-shadow: var(--shadow); }
+.eyebrow { font-size: 11px; letter-spacing: .14em; font-weight: 800; color: var(--brand); }
+h1 { font-size: 27px; line-height: 1.2; margin: 12px 0; }
+.intro { font-size: 14px; color: var(--muted); line-height: 1.6; margin-bottom: 22px; }
+form { display: grid; gap: 14px; }
+label { display: grid; gap: 6px; font-size: 13px; font-weight: 650; }
+input, select { display: block; width: 100%; min-height: 43px; padding: 10px 12px; border: 1px solid #cdd4e1; border-radius: 9px; background: white; color: var(--ink); }
+input:focus, select:focus { outline: 2px solid #b3aefe; border-color: var(--brand); }
+small { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.btn { width: 100%; margin-top: 7px; }
+.btn:disabled { opacity: .6; cursor: not-allowed; }
+.links { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-top: 20px; font-size: 13px; }
+.links a { color: var(--brand); font-weight: 700; }
+.feedback { padding: 12px; border-radius: 9px; font-size: 13px; margin: 16px 0 0; line-height: 1.5; }
+.error { color: #9c1c29; background: #fff0f1; }
+.success { color: #146e47; background: #eaf8f0; }
+@media (max-width: 480px) { .auth-card { padding: 22px; } }
