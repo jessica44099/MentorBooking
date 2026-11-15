@@ -10,7 +10,7 @@
 
   @if (!user()?.isEmailVerified) {
     <section class="notice" aria-label="Email verification required">
-      <div><strong>Verify your email.</strong><p>Booking and approval require a verified email address. In development, check the backend terminal for the link.</p></div>
+      <div><strong>Verify your email.</strong><p>Booking and approval require a verified email address. Check your email inbox for the link. If it hasn't arrived, select Resend link.</p></div>
       <button class="btn btn-primary" type="button" [disabled]="sending" (click)="resendVerification()">{{ sending ? 'Sendingâ€¦' : 'Resend link' }}</button>
     </section>
   }
