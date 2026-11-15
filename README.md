@@ -50,9 +50,15 @@ $sender = Read-Host 'Verified Brevo From email'
 dotnet user-secrets set 'EmailDelivery:FromAddress' $sender --project .\MentorBooking.Api.csproj
 $smtpLogin = Read-Host 'Brevo SMTP login (not From email)'
 dotnet user-secrets set 'EmailDelivery:SmtpUsername' $smtpLogin --project .\MentorBooking.Api.csproj
-$smtpKey = Read-Host 'Brevo SMTP key (input hidden)' -MaskInput
-dotnet user-secrets set 'EmailDelivery:SmtpPassword' $smtpKey --project .\MentorBooking.Api.csproj
-Remove-Variable sender,smtpLogin,smtpKey
+$secureKey = Read-Host 'Brevo SMTP key (input hidden)' -AsSecureString
+$pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureKey)
+try {
+  $smtpKey = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+  dotnet user-secrets set 'EmailDelivery:SmtpPassword' $smtpKey --project .\MentorBooking.Api.csproj
+} finally {
+  [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+  Remove-Variable sender,smtpLogin,secureKey,smtpKey -ErrorAction SilentlyContinue
+}
 ```
 
 User Secrets are used automatically when `ASPNETCORE_ENVIRONMENT=Development`. For hosted deployments, provide the same settings through secret environment variables such as `EmailDelivery__SmtpPassword`. Set `Frontend__BaseUrl` to the publicly accessible **HTTPS** Angular site on deployment. Never commit actual credentials.
