@@ -60,10 +60,10 @@ public sealed class FakeEmailService : IEmailService
             Subject = subject,
             HtmlBody = RedactTokens(htmlBody),
             TextBody = RedactTokens(textBody),
-            Status = EmailStatus.Sent,
+            Status = EmailStatus.Previewed,
             AttemptCount = 1,
             CreatedAtUtc = DateTime.UtcNow,
-            SentAtUtc = DateTime.UtcNow
+            SentAtUtc = null
         };
 
         try
@@ -82,14 +82,8 @@ public sealed class FakeEmailService : IEmailService
                 Microsoft.EntityFrameworkCore.EntityState.Detached;
         }
 
-        // Development only: show the complete link.
-        Console.WriteLine();
-        Console.WriteLine("========== FAKE EMAIL ==========");
-        Console.WriteLine($"To: {to}");
-        Console.WriteLine($"Subject: {subject}");
-        Console.WriteLine();
-        Console.WriteLine(textBody);
-        Console.WriteLine("================================");
-        Console.WriteLine();
+        // This legacy test preview is not registered in the real API.
+        // Never write a raw verification/reset token to console logs.
+        Console.WriteLine("Fake email preview generated; token and message body suppressed.");
     }
 }
