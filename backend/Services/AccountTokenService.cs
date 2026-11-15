@@ -10,6 +10,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MentorBooking.Api.Services;
 
+// Raised when the configured mail provider does not accept an account email.
+// Never include the SMTP exception text or the verification/reset link.
+public sealed class AccountEmailDeliveryException : Exception
+{
+    public AccountEmailDeliveryException()
+        : base("The email could not be sent. Please try again later.") { }
+}
+
 public interface IAccountTokenService
 {
     Task SendVerificationAsync(
@@ -109,9 +117,13 @@ public sealed class AccountTokenService : IAccountTokenService
         catch (Exception ex)
             when (ex is not OperationCanceledException)
         {
-            // Email failure must not undo the user's action.
+            // The token is committed first. The HTTP endpoint can now
+            // explain the delivery failure without exposing the raw token.
+            // Do not log the SMTP exception message or its payload.
             _logger.LogError(
-                ex, "Could not deliver account email.");
+                "Account email delivery failed ({ErrorType}).",
+                ex.GetType().Name);
+            throw new AccountEmailDeliveryException();
         }
     }
 
