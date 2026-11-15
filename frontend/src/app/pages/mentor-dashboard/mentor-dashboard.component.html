@@ -9,7 +9,10 @@
   </header>
 
   @if (!auth.user()?.isEmailVerified) {
-    <p class="notice">Your email is not yet verified. You can edit your profile, but approving bookings requires verification. Use the resend option on your account dashboard.</p>
+    <section class="notice" aria-label="Email verification required">
+      <p>Your email is not yet verified. You can edit your profile, but booking approvals require verification. Check your inbox for the link.</p>
+      <button class="btn btn-outline" type="button" [disabled]="sendingVerification" (click)="resendVerification()">{{ sendingVerification ? 'Sending…' : 'Resend verification link' }}</button>
+    </section>
   }
 
   @if (error) { <p class="feedback error" role="alert">{{ error }}</p> }
