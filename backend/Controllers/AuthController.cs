@@ -43,6 +43,16 @@ public sealed class AuthController : ControllerBase
                 error = ex.Message
             });
         }
+        catch (AccountEmailDeliveryException)
+        {
+            // The account was saved, but its verification mail was not accepted.
+            // Let the user log in and request a new link without re-registering.
+            return StatusCode(503, new
+            {
+                error = "Your account was created, but the verification email " +
+                        "could not be sent. Please log in and resend the link."
+            });
+        }
         catch (InvalidOperationException ex)
             when (ex.Message == "Email is already registered.")
         {
@@ -131,6 +141,14 @@ public sealed class AuthController : ControllerBase
                     "Verification request processed."
             });
         }
+        catch (AccountEmailDeliveryException)
+        {
+            return StatusCode(503, new
+            {
+                error = "Verification email could not be sent. " +
+                        "Please try again later."
+            });
+        }
         catch (InvalidOperationException ex)
             when (ex.Message.StartsWith("Maximum 3"))
         {
@@ -156,9 +174,18 @@ public sealed class AuthController : ControllerBase
         [FromBody] ForgotPasswordRequest request,
         CancellationToken cancellationToken)
     {
-        await _tokens.RequestPasswordResetAsync(
-            request.Email,
-            cancellationToken);
+        try
+        {
+            await _tokens.RequestPasswordResetAsync(
+                request.Email,
+                cancellationToken);
+        }
+        catch (AccountEmailDeliveryException)
+        {
+            // Keep the same response as for unknown accounts to avoid
+            // exposing whether an email address is registered.
+            // Details are logged server-side without including reset tokens.
+        }
 
         // Identical response for existing and unknown emails.
         return Ok(new
