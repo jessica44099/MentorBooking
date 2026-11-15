@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { ReactiveFormsModule, FormBuilder, Validators } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -14,7 +14,7 @@ type AuthMode = 'login' | 'register' | 'forgot' | 'reset' | 'verify';
   templateUrl: './auth-page.component.html',
   styleUrl: './auth-page.component.scss'
 })
-export class AuthPageComponent {
+export class AuthPageComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
@@ -48,6 +48,14 @@ export class AuthPageComponent {
     password: ['', [Validators.required, Validators.minLength(8)]],
     confirmPassword: ['', Validators.required]
   });
+
+  ngOnInit(): void {
+    // A verification link should complete verification when opened;
+    // the button remains available to retry a temporary API failure.
+    if (this.mode === 'verify' && this.token) {
+      this.verify();
+    }
+  }
 
   submit(): void {
     if (this.busy) return;

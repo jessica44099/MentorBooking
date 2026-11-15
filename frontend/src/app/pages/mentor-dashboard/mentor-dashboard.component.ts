@@ -36,6 +36,7 @@ export class MentorDashboardComponent implements OnInit {
   savingSlot = false;
   loadingSessions = false;
   processingSession = false;
+  resendingVerification = false;
   error = '';
   success = '';
 
@@ -136,6 +137,18 @@ export class MentorDashboardComponent implements OnInit {
           this.success = 'Your profile was saved successfully.';
         },
         error: err => this.error = this.errorMessage(err, 'Could not save mentor profile.')
+      });
+  }
+
+  resendVerification(): void {
+    if (this.resendingVerification) return;
+    this.resendingVerification = true;
+    this.clearMessages();
+    this.auth.resendVerification()
+      .pipe(finalize(() => this.resendingVerification = false))
+      .subscribe({
+        next: response => this.success = response.message,
+        error: err => this.error = this.errorMessage(err, 'Could not send verification email.')
       });
   }
 

@@ -1,0 +1,37 @@
+name: Build and test
+
+on:
+  push:
+    branches:
+      - main
+      - fix/brevo-transactional-email
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore and test
+        run: dotnet test tests/MentorBooking.Tests/MentorBooking.Tests.csproj --configuration Release --verbosity normal
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Production build
+        working-directory: frontend
+        run: npm run build

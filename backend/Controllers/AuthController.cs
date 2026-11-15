@@ -46,9 +46,14 @@ public sealed class AuthController : ControllerBase
         catch (InvalidOperationException ex)
             when (ex.Message == "Email is already registered.")
         {
-            return Conflict(new
+            return Conflict(new { error = ex.Message });
+        }
+        catch (AccountEmailDeliveryException)
+        {
+            // The account is already saved. The user can log in to resend.
+            return StatusCode(503, new
             {
-                error = ex.Message
+                error = "Account created, but the verification email could not be sent. Log in and resend verification."
             });
         }
     }
@@ -142,9 +147,13 @@ public sealed class AuthController : ControllerBase
         catch (InvalidOperationException ex)
             when (ex.Message == "Account not found.")
         {
-            return NotFound(new
+            return NotFound(new { error = ex.Message });
+        }
+        catch (AccountEmailDeliveryException)
+        {
+            return StatusCode(503, new
             {
-                error = ex.Message
+                error = "Verification email could not be sent. Please try again later."
             });
         }
     }
@@ -156,9 +165,17 @@ public sealed class AuthController : ControllerBase
         [FromBody] ForgotPasswordRequest request,
         CancellationToken cancellationToken)
     {
-        await _tokens.RequestPasswordResetAsync(
-            request.Email,
-            cancellationToken);
+        try
+        {
+            await _tokens.RequestPasswordResetAsync(
+                request.Email,
+                cancellationToken);
+        }
+        catch (AccountEmailDeliveryException)
+        {
+            // Preserve the same public response for known and unknown
+            // email addresses, including when the mail provider fails.
+        }
 
         // Identical response for existing and unknown emails.
         return Ok(new
