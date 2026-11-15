@@ -10,6 +10,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MentorBooking.Api.Services;
 
+// Safe, non-sensitive failure type for SMTP delivery errors.
+public sealed class AccountEmailDeliveryException : Exception
+{
+    public AccountEmailDeliveryException(Exception innerException)
+        : base("Account email delivery failed.", innerException) { }
+}
+
 public interface IAccountTokenService
 {
     Task SendVerificationAsync(
@@ -112,6 +119,7 @@ public sealed class AccountTokenService : IAccountTokenService
             // Email failure must not undo the user's action.
             _logger.LogError(
                 ex, "Could not deliver account email.");
+            throw new AccountEmailDeliveryException(ex);
         }
     }
 

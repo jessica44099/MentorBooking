@@ -60,10 +60,10 @@ public sealed class FakeEmailService : IEmailService
             Subject = subject,
             HtmlBody = RedactTokens(htmlBody),
             TextBody = RedactTokens(textBody),
-            Status = EmailStatus.Sent,
+            Status = EmailStatus.Previewed,
             AttemptCount = 1,
             CreatedAtUtc = DateTime.UtcNow,
-            SentAtUtc = DateTime.UtcNow
+            SentAtUtc = null
         };
 
         try

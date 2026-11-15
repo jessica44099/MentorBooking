@@ -32,6 +32,7 @@ export class MentorDashboardComponent implements OnInit {
   activeTab: Tab = 'profile';
   loadingProfile = true;
   savingProfile = false;
+  sendingVerification = false;
   loadingCalendar = false;
   savingSlot = false;
   loadingSessions = false;
@@ -96,6 +97,19 @@ export class MentorDashboardComponent implements OnInit {
     this.activeTab = tab;
     if (tab === 'calendar') this.loadCalendar();
     if (tab === 'sessions') this.loadSessions();
+  }
+
+  resendVerification(): void {
+    if (this.sendingVerification) return;
+    this.sendingVerification = true;
+    this.clearMessages();
+    this.auth.resendVerification()
+      .pipe(finalize(() => this.sendingVerification = false))
+      .subscribe({
+        next: response => this.success = response.message,
+        error: err => this.error = this.errorMessage(
+          err, 'Could not send verification email.')
+      });
   }
 
   loadProfile(): void {

@@ -79,40 +79,58 @@ builder.Services.AddScoped<
     AuthService>();
 
 // =====================================================
-// 5. EMAIL SERVICES — STEP 30
+// 5. EMAIL SERVICES
 // =====================================================
 
-// Development:
-//   Fake authentication emails.
-//   Preview queued session emails.
-//
-// Other environments:
-//   Real SMTP for authentication emails.
-//   Real SMTP for queued session emails.
+// Real email can be enabled in Development too. This is essential for
+// testing Brevo with local Angular while keeping secrets outside Git.
+// Disabled Development mode retains the fake preview sender for tests.
+var realEmailEnabled = builder.Configuration.GetValue<bool>(
+    "EmailDelivery:Enabled");
 
-if (builder.Environment.IsDevelopment())
+if (realEmailEnabled)
 {
-    // Development authentication emails.
-    builder.Services.AddScoped<
-        IEmailService,
-        FakeEmailService>();
+    var requiredSmtpSettings = new[]
+    {
+        "EmailDelivery:SmtpHost",
+        "EmailDelivery:SmtpUsername",
+        "EmailDelivery:SmtpPassword",
+        "EmailDelivery:FromAddress"
+    };
 
-    // Development queued email previews.
-    builder.Services.AddScoped<
-        IQueuedEmailSender,
-        DevelopmentQueuedEmailSender>();
+    var missingSettings = requiredSmtpSettings
+        .Where(setting => string.IsNullOrWhiteSpace(
+            builder.Configuration[setting]))
+        .ToArray();
+
+    if (missingSettings.Length > 0)
+    {
+        throw new InvalidOperationException(
+            "Real email delivery is enabled, but these settings are missing: " +
+            string.Join(", ", missingSettings) +
+            ". Configure them with .NET User Secrets or environment variables.");
+    }
+
+    if (!builder.Configuration.GetValue<bool>(
+            "EmailDelivery:RequireStartTls", true))
+    {
+        throw new InvalidOperationException(
+            "EmailDelivery:RequireStartTls must be true.");
+    }
+
+    builder.Services.AddScoped<IEmailService, SmtpAccountEmailService>();
+    builder.Services.AddScoped<IQueuedEmailSender, SmtpQueuedEmailSender>();
+}
+else if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddScoped<IEmailService, FakeEmailService>();
+    builder.Services.AddScoped<IQueuedEmailSender, DevelopmentQueuedEmailSender>();
 }
 else
 {
-    // Production/staging authentication emails.
-    builder.Services.AddScoped<
-        IEmailService,
-        SmtpAccountEmailService>();
-
-    // Production/staging queued email delivery.
-    builder.Services.AddScoped<
-        IQueuedEmailSender,
-        SmtpQueuedEmailSender>();
+    throw new InvalidOperationException(
+        "Real email delivery must be enabled outside Development. " +
+        "Set EmailDelivery:Enabled to true and configure SMTP credentials securely.");
 }
 
 // Email verification and password reset tokens.
