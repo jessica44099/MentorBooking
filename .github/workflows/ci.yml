@@ -36,3 +36,6 @@ jobs:
       - name: Build frontend
         run: npm run build
         working-directory: frontend
+      - name: Run Angular unit tests in headless Chrome
+        run: npm test -- --watch=false --browsers=ChromeHeadless
+        working-directory: frontend
