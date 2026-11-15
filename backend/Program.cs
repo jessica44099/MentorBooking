@@ -90,30 +90,11 @@ builder.Services.AddScoped<
 //   Real SMTP for authentication emails.
 //   Real SMTP for queued session emails.
 
-if (builder.Environment.IsDevelopment())
-{
-    // Development authentication emails.
-    builder.Services.AddScoped<
-        IEmailService,
-        FakeEmailService>();
-
-    // Development queued email previews.
-    builder.Services.AddScoped<
-        IQueuedEmailSender,
-        DevelopmentQueuedEmailSender>();
-}
-else
-{
-    // Production/staging authentication emails.
-    builder.Services.AddScoped<
-        IEmailService,
-        SmtpAccountEmailService>();
-
-    // Production/staging queued email delivery.
-    builder.Services.AddScoped<
-        IQueuedEmailSender,
-        SmtpQueuedEmailSender>();
-}
+// Use one real SMTP transport in both Development and hosted environments.
+// A missing or disabled configuration causes an explicit delivery error,
+// never a misleading console preview of a security-sensitive account link.
+builder.Services.AddScoped<IQueuedEmailSender, SmtpQueuedEmailSender>();
+builder.Services.AddScoped<IEmailService, SmtpAccountEmailService>();
 
 // Email verification and password reset tokens.
 builder.Services.AddScoped<
