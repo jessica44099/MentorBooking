@@ -326,6 +326,19 @@ builder.Services.AddAuthorization();
 // 22. BUILD THE APPLICATION
 // =====================================================
 
+// Angular development CORS policy.
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AngularDevelopment", policy =>
+    {
+        policy
+            .WithOrigins("http://localhost:4200")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
+
+
 var app = builder.Build();
 
 // =====================================================
@@ -441,6 +454,14 @@ else
 
 // Authentication MUST execute before authorization.
 
+
+// Allow the local Angular development server.
+if (app.Environment.IsDevelopment())
+{
+    app.UseCors("AngularDevelopment");
+}
+
+// Authentication must precede authorization.
 app.UseAuthentication();
 
 app.UseAuthorization();
